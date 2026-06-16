@@ -115,6 +115,23 @@ def month_end_dates(idx: pd.DatetimeIndex) -> set:
     return set(ends.values)
 
 
+def score_composite(ticker: str, d, prices: pd.DataFrame, pos_map: dict,
+                    w21: int = 21, w84: int = 84) -> float:
+    """50/50 blend of 21d and 84d raw momentum."""
+    SYNTHETIC_CASH = "CASH"
+    if ticker == SYNTHETIC_CASH:
+        return 0.0
+    pos = pos_map.get(d, -1)
+    if pos < w84 or ticker not in prices.columns:
+        return np.nan
+    p_now = float(prices.iloc[pos][ticker])
+    p_21  = float(prices.iloc[pos - w21][ticker])
+    p_84  = float(prices.iloc[pos - w84][ticker])
+    if p_21 <= 0 or p_84 <= 0:
+        return np.nan
+    return 0.5 * (p_now / p_21 - 1) + 0.5 * (p_now / p_84 - 1)
+
+
 def run_backtest(prices: pd.DataFrame,
                  factor_tickers: list,   # [(label, ticker), ...]
                  sector_tickers: list,
@@ -122,9 +139,11 @@ def run_backtest(prices: pd.DataFrame,
                  regime_compare_ticker: str,  # used only for regime gate comparison
                  cash_ticker: str,            # "CASH" = synthetic flat (0% return)
                  n_factor: int = 1,
-                 n_sector: int = 1) -> tuple:
+                 n_sector: int = 1,
+                 metric: str = "raw") -> tuple:
     """
-    raw/sel126/reg252 dual-sleeve rotation.
+    Dual-sleeve monthly rotation.
+    metric: "raw" uses SEL_LB-day return; "composite" uses 50% 21d + 50% 84d return.
     Returns (equity_curve, alloc_log) where:
       equity_curve: [{"date": "YYYY-MM-DD", "value": float}, ...]
       alloc_log:    [{"date": "YYYY-MM-DD", "holdings": {ticker: weight}}, ...]
@@ -136,9 +155,9 @@ def run_backtest(prices: pd.DataFrame,
     rebal_set = month_end_dates(all_idx)
     pos_map  = {d: i for i, d in enumerate(all_idx)}
 
+    warmup   = max(REG_LB, 84 if metric == "composite" else SEL_LB)
     sim_dates = all_idx[all_idx >= pd.Timestamp(START)]
-    # First valid rebalance: need REG_LB trading days of history
-    min_date  = all_idx[REG_LB] if len(all_idx) > REG_LB else all_idx[-1]
+    min_date  = all_idx[warmup] if len(all_idx) > warmup else all_idx[-1]
 
     cash_bal = float(CAPITAL)
     shares   = {}
@@ -167,6 +186,11 @@ def run_backtest(prices: pd.DataFrame,
         if p0 <= 0:
             return np.nan
         return p1 / p0 - 1
+
+    def score(ticker):
+        if metric == "composite":
+            return score_composite(ticker, d, prices, pos_map)
+        return ret_lb(ticker, d, SEL_LB)
 
     for d in sim_dates:
         # ── Execute pending rebalance ────────────────────────────
@@ -201,7 +225,7 @@ def run_backtest(prices: pd.DataFrame,
         if d not in rebal_set or d < min_date:
             continue
 
-        # ── Regime gate (252d) ───────────────────────────────────
+        # ── Regime gate ──────────────────────────────────────────
         r_mkt     = ret_lb(regime_ticker,         d, REG_LB)
         r_compare = ret_lb(regime_compare_ticker, d, REG_LB)
         if (not np.isnan(r_mkt) and not np.isnan(r_compare)
@@ -211,9 +235,9 @@ def run_backtest(prices: pd.DataFrame,
                           "holdings": {cash_ticker: 1.0}})
             continue
 
-        # ── Selection (126d raw return) ──────────────────────────
+        # ── Selection ────────────────────────────────────────────
         def top_n(tickers, n):
-            sc = {t: ret_lb(t, d, SEL_LB) for t in tickers}
+            sc = {t: score(t) for t in tickers}
             sc = {t: v for t, v in sc.items() if not np.isnan(v)}
             return sorted(sc, key=sc.__getitem__, reverse=True)[:n]
 
@@ -380,11 +404,17 @@ def run(cfg: dict = None, use_cache: bool = False):
     prices_adj    = prices_raw.copy()
     prices_adj[strategy_cols] = apply_ter(prices_raw[strategy_cols], ter_map)
 
-    log.info("Running top1/top1 backtest...")
-    eq1, al1 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 1, 1)
+    log.info("Running D1 (raw top1/top1)...")
+    eq1, al1 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 1, 1, "raw")
 
-    log.info("Running top2/top2 backtest...")
-    eq2, al2 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 2, 2)
+    log.info("Running D2 (raw top2/top2)...")
+    eq2, al2 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 2, 2, "raw")
+
+    log.info("Running D1-composite (top1/top1)...")
+    eq1c, al1c = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 1, 1, "composite")
+
+    log.info("Running D2-composite (top2/top2)...")
+    eq2c, al2c = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 2, 2, "composite")
 
     # Benchmark raw close series (no TER)
     benchmarks_out = {}
@@ -411,6 +441,20 @@ def run(cfg: dict = None, use_cache: bool = False):
                 "stats":          compute_stats(eq2),
                 "allocation":     alloc_to_matrix(al2),
                 "current_signal": current_signal(al2, cfg),
+            },
+            "d1_composite": {
+                "label":          "D1-composite",
+                "nav":            eq1c,
+                "stats":          compute_stats(eq1c),
+                "allocation":     alloc_to_matrix(al1c),
+                "current_signal": current_signal(al1c, cfg),
+            },
+            "d2_composite": {
+                "label":          "D2-composite",
+                "nav":            eq2c,
+                "stats":          compute_stats(eq2c),
+                "allocation":     alloc_to_matrix(al2c),
+                "current_signal": current_signal(al2c, cfg),
             },
         },
         "benchmarks":      benchmarks_out,

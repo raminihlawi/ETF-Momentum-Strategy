@@ -3,12 +3,14 @@
 
 // ── Palette ────────────────────────────────────────────────────────
 const SERIES_CFG = {
-  top1_top1:    { label: "D1 — top1/top1", color: "#5b6ef5", width: 2.2 },
-  top2_top2:    { label: "D2 — top2/top2", color: "#a78bfa", width: 2.2 },
-  "MSCI World": { label: "MSCI World",     color: "#64748b", width: 1.4 },
-  "OMXS30":     { label: "OMXS30",         color: "#38bdf8", width: 1.4 },
-  "Nasdaq":     { label: "Nasdaq",          color: "#f59e0b", width: 1.4 },
-  "S&P 500":    { label: "S&P 500",        color: "#10b981", width: 1.4 },
+  top1_top1:    { label: "D1 — raw",         color: "#5b6ef5", width: 1.8 },
+  top2_top2:    { label: "D2 — raw",         color: "#a78bfa", width: 1.8 },
+  d1_composite: { label: "D1-composite",     color: "#10b981", width: 2.2 },
+  d2_composite: { label: "D2-composite",     color: "#34d399", width: 2.2 },
+  "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
+  "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
+  "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
+  "S&P 500":    { label: "S&P 500",          color: "#f97316", width: 1.4 },
 };
 
 const ALLOC_PALETTE = [
@@ -19,7 +21,7 @@ const ALLOC_PALETTE = [
 // ── State ──────────────────────────────────────────────────────────
 let DATA = null;
 let CONFIG = null;
-let activeKeys = new Set(["top1_top1", "top2_top2", "MSCI World"]);
+let activeKeys = new Set(["top1_top1", "top2_top2", "d1_composite", "d2_composite", "MSCI World"]);
 let mainChart = null;
 
 // ── Init ───────────────────────────────────────────────────────────
@@ -164,11 +166,11 @@ function renderMainChart() {
     });
   }
 
-  // ── Build a consistent ticker→color map across both strategies ────
+  // ── Build a consistent ticker→color map across all strategies ─────
   // Same ETF always gets the same color regardless of which strip it's in.
   const tickerColorMap = {};
   let colorIdx = 0;
-  for (const sk of ["top1_top1", "top2_top2"]) {
+  for (const sk of ["top1_top1", "top2_top2", "d1_composite", "d2_composite"]) {
     const alloc = DATA?.strategies?.[sk]?.allocation;
     if (!alloc?.tickers) continue;
     alloc.tickers.forEach((t, i) => {
@@ -201,8 +203,10 @@ function renderMainChart() {
       });
   }
 
-  const allocD1 = buildAllocSeries("top1_top1", 1, 1);
-  const allocD2 = buildAllocSeries("top2_top2", 2, 2);
+  const allocD1raw  = buildAllocSeries("top1_top1",    1, 1);
+  const allocD1comp = buildAllocSeries("d1_composite",  2, 2);
+  const allocD2raw  = buildAllocSeries("top2_top2",     3, 3);
+  const allocD2comp = buildAllocSeries("d2_composite",  4, 4);
 
   // ── Tooltip formatter ─────────────────────────────────────────────
   function tooltipFormatter(params) {
@@ -217,7 +221,7 @@ function renderMainChart() {
       </div>`
     ).join("");
 
-    const allocSection = ["top1_top1", "top2_top2"].map(k => {
+    const allocSection = ["top1_top1", "d1_composite", "top2_top2", "d2_composite"].map(k => {
       const holdings = allocAtDate(k, dateStr);
       if (!holdings) return "";
       const c = SERIES_CFG[k] || {};
@@ -233,21 +237,23 @@ function renderMainChart() {
       </div>`;
     }).join("");
 
-    return `<div style="font-size:11px;max-width:300px">
+    return `<div style="font-size:11px;max-width:320px">
       <div style="color:#4a5170;margin-bottom:6px">${dateStr}</div>
       ${perfRows}${allocSection}
     </div>`;
   }
 
-  // ── ECharts option — 3 grids, all x-axes share startDate min ─────
+  // ── ECharts option — 5 grids, all x-axes share startDate min ─────
   mainChart.setOption({
     backgroundColor: "transparent",
     animation: false,
 
     grid: [
-      { top: 16,    left: 60, right: 20, bottom: "43%" },  // perf
-      { top: "59%", left: 60, right: 20, height: "15%" },  // D1 strip
-      { top: "77%", left: 60, right: 20, bottom: 26 },     // D2 strip
+      { top: 16,    left: 60, right: 20, bottom: "52%" },   // perf
+      { top: "50%", left: 60, right: 20, height: "10%" },   // D1-raw strip
+      { top: "62%", left: 60, right: 20, height: "10%" },   // D1-composite strip
+      { top: "74%", left: 60, right: 20, height: "10%" },   // D2-raw strip
+      { top: "86%", left: 60, right: 20, bottom: 26 },      // D2-composite strip
     ],
 
     xAxis: [
@@ -260,6 +266,14 @@ function renderMainChart() {
         axisLine:  { lineStyle: { color: "#252a3d" } },
         splitLine: { show: false }, axisTick: { show: false } },
       { type: "time", gridIndex: 2, min: startDate,
+        axisLabel: { show: false },
+        axisLine:  { lineStyle: { color: "#252a3d" } },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "time", gridIndex: 3, min: startDate,
+        axisLabel: { show: false },
+        axisLine:  { lineStyle: { color: "#252a3d" } },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "time", gridIndex: 4, min: startDate,
         axisLabel: { color: "#4a5170", fontSize: 10 },
         axisLine:  { lineStyle: { color: "#252a3d" } },
         splitLine: { show: false },
@@ -273,16 +287,24 @@ function renderMainChart() {
         splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
         axisTick:  { show: false } },
       { type: "value", gridIndex: 1, max: 100, min: 0,
-        name: "D1", nameLocation: "end",
-        nameTextStyle: { color: "#5b6ef5", fontSize: 10, fontWeight: 600, padding: [0, 0, 4, 0] },
-        axisLabel: { show: false },
-        axisLine:  { show: false },
+        name: "D1-raw", nameLocation: "end",
+        nameTextStyle: { color: "#5b6ef5", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
+        axisLabel: { show: false }, axisLine: { show: false },
         splitLine: { show: false }, axisTick: { show: false } },
       { type: "value", gridIndex: 2, max: 100, min: 0,
-        name: "D2", nameLocation: "end",
-        nameTextStyle: { color: "#a78bfa", fontSize: 10, fontWeight: 600, padding: [0, 0, 4, 0] },
-        axisLabel: { show: false },
-        axisLine:  { show: false },
+        name: "D1-comp", nameLocation: "end",
+        nameTextStyle: { color: "#10b981", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
+        axisLabel: { show: false }, axisLine: { show: false },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "value", gridIndex: 3, max: 100, min: 0,
+        name: "D2-raw", nameLocation: "end",
+        nameTextStyle: { color: "#a78bfa", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
+        axisLabel: { show: false }, axisLine: { show: false },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "value", gridIndex: 4, max: 100, min: 0,
+        name: "D2-comp", nameLocation: "end",
+        nameTextStyle: { color: "#34d399", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
+        axisLabel: { show: false }, axisLine: { show: false },
         splitLine: { show: false }, axisTick: { show: false } },
     ],
 
@@ -301,14 +323,16 @@ function renderMainChart() {
 
     legend: { show: false },
 
-    series: [...perfSeries, ...allocD1, ...allocD2],
+    series: [...perfSeries, ...allocD1raw, ...allocD1comp, ...allocD2raw, ...allocD2comp],
   }, true);
 }
 
 // ── Signal cards ───────────────────────────────────────────────────
 function renderSignalCards() {
-  renderSignalCard("signal-d1", DATA?.strategies?.top1_top1, "D1 — top1/top1");
-  renderSignalCard("signal-d2", DATA?.strategies?.top2_top2, "D2 — top2/top2");
+  renderSignalCard("signal-d1",    DATA?.strategies?.top1_top1,    "D1 — raw");
+  renderSignalCard("signal-d2",    DATA?.strategies?.top2_top2,    "D2 — raw");
+  renderSignalCard("signal-d1c",   DATA?.strategies?.d1_composite, "D1-composite");
+  renderSignalCard("signal-d2c",   DATA?.strategies?.d2_composite, "D2-composite");
 }
 
 function renderSignalCard(elId, strat, title) {
@@ -365,8 +389,10 @@ function renderStats() {
 
   // ── Summary metrics ──────────────────────────────────────────────
   const STRATS = [
-    { key: "top1_top1", label: "D1", color: "#5b6ef5" },
-    { key: "top2_top2", label: "D2", color: "#a78bfa" },
+    { key: "top1_top1",    label: "D1 — raw",      color: "#5b6ef5" },
+    { key: "d1_composite", label: "D1-composite",   color: "#10b981" },
+    { key: "top2_top2",    label: "D2 — raw",      color: "#a78bfa" },
+    { key: "d2_composite", label: "D2-composite",   color: "#34d399" },
   ];
 
   function pct(v, decimals = 1) {
@@ -453,7 +479,10 @@ function renderStats() {
     <div class="bg-panel border border-border rounded-lg p-4">
       <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per Year — full-period summary in the cards above</p>
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        ${STRATS.map(annualTable).join("")}
+        ${annualTable(STRATS[0])}${annualTable(STRATS[1])}
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+        ${annualTable(STRATS[2])}${annualTable(STRATS[3])}
       </div>
     </div>`;
 
@@ -499,7 +528,7 @@ function renderStats() {
     <div class="space-y-5">
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaryCards}</div>
       ${annualSection}
-      <div class="bg-panel border border-border rounded-lg p-4 space-y-6">${heatmaps}</div>
+      <div class="bg-panel border border-border rounded-lg p-4 space-y-8">${heatmaps}</div>
     </div>`;
 }
 
