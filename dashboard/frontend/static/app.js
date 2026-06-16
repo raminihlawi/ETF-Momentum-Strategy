@@ -129,6 +129,23 @@ function toggleSeries(key, btn, color) {
   renderPerfChart();
 }
 
+// ── Allocation lookup (for tooltip) ───────────────────────────────
+function allocAtDate(stratKey, dateStr) {
+  const alloc = DATA?.strategies?.[stratKey]?.allocation;
+  if (!alloc?.dates?.length) return null;
+  // Last rebalance date <= dateStr
+  let idx = -1;
+  for (let i = 0; i < alloc.dates.length; i++) {
+    if (alloc.dates[i] <= dateStr) idx = i;
+    else break;
+  }
+  if (idx === -1) return null;
+  const row = alloc.weights[idx];
+  const holdings = {};
+  alloc.tickers.forEach((t, i) => { if (row[i] > 0) holdings[t] = row[i]; });
+  return holdings;
+}
+
 // ── Performance chart ──────────────────────────────────────────────
 function renderPerfChart() {
   const startDate = document.getElementById("start-date").value;
@@ -201,14 +218,41 @@ function renderPerfChart() {
       textStyle:   { color: "#c9d1e0", fontSize: 12 },
       axisPointer: { type: "cross", crossStyle: { color: "#4a5170" } },
       formatter(params) {
-        const date = params[0]?.axisValueLabel || "";
-        const rows = params.map(p =>
-          `<div style="display:flex;justify-content:space-between;gap:24px">
+        if (!params?.length) return "";
+        // axisValue on a time-type axis is epoch ms
+        const dateStr = new Date(params[0].axisValue).toISOString().slice(0, 10);
+
+        // Performance rows
+        const perfRows = params.map(p =>
+          `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:2px">
             <span style="color:${p.color}">${p.seriesName}</span>
-            <span>${(+p.value[1]).toFixed(1)}</span>
+            <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
           </div>`
         ).join("");
-        return `<div style="font-size:11px"><div style="color:#4a5170;margin-bottom:4px">${date}</div>${rows}</div>`;
+
+        // Allocation rows — one block per active strategy
+        const stratKeys = ["top1_top1", "top2_top2"].filter(k => activeKeys.has(k));
+        const allocSection = stratKeys.map(k => {
+          const holdings = allocAtDate(k, dateStr);
+          if (!holdings) return "";
+          const c = SERIES_CFG[k] || {};
+          const items = Object.entries(holdings)
+            .map(([t, w]) =>
+              `<span style="background:#ffffff12;border-radius:3px;padding:1px 5px;margin-right:3px">
+                ${tickerLabel(t)} <span style="opacity:.7">${Math.round(w * 100)}%</span>
+              </span>`)
+            .join("");
+          return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #252a3d">
+            <div style="color:${c.color || "#4a5170"};margin-bottom:3px;font-size:10px">${c.label || k}</div>
+            <div style="line-height:1.9">${items}</div>
+          </div>`;
+        }).join("");
+
+        return `<div style="font-size:11px;max-width:280px">
+          <div style="color:#4a5170;margin-bottom:6px">${dateStr}</div>
+          ${perfRows}
+          ${allocSection}
+        </div>`;
       },
     },
     series: seriesList,
