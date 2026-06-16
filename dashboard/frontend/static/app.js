@@ -1,6 +1,120 @@
 /* ETF Rotation Dashboard — app.js */
 "use strict";
 
+// ── Strategy specifications (shown in popup) ───────────────────────
+const STRATEGY_SPECS = {
+  top1_top1: {
+    color: "#5b6ef5",
+    tagline: "Referensstrategi — bästa momentum per sleeve, 84 dagars råavkastning",
+    description: "Den enklaste formen av momentum-rotation. Väljer den ETF med högst avkastning de senaste 84 handelsdagarna (~4 månader) ur respektive sleeve, ombalanserar sista handelsdagen varje månad. Tjänar som referenspunkt för alla övriga strategier.",
+    params: [
+      { k: "Metric",          v: "Raw return — 84 dagars TER-justerad avkastning" },
+      { k: "Urval",           v: "Top 1 faktor-ETF + Top 1 sektor-ETF (50 % / 50 %)" },
+      { k: "Regimfilter",     v: "IWDA.L vs IBTS.L — 84d. Risk-off om IWDA underavkastar IBTS" },
+      { k: "Rebalansering",   v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",  v: "15 bps per sida" },
+      { k: "Faktor-universum",v: "USA MOM · USA QUAL · USA VAL · USA SMALL · EUR MOM · EUR QUAL · EUR VAL · EUR SMALL" },
+      { k: "Sektor-universum",v: "IT · Energy · Healthcare · Cons.Disc. · Industrials · Cons.Staples · Materials" },
+    ],
+    source: "Baseline — 84d lookback valdes via parametersweep (bäst Sharpe bland 21/42/63/84/126d)",
+  },
+  top2_top2: {
+    color: "#a78bfa",
+    tagline: "Bredare exponering — top 2 per sleeve för lägre koncentrationsrisk",
+    description: "Identisk logik som D1-raw men väljer de 2 bästa ETF:erna ur varje sleeve. Varje sleeve viktas 50 %, delat lika mellan de 2 vinnarna (25 % var). Ger mer diversifiering men tenderar att späda ut alpha.",
+    params: [
+      { k: "Metric",          v: "Raw return — 84 dagars TER-justerad avkastning" },
+      { k: "Urval",           v: "Top 2 faktor-ETF + Top 2 sektor-ETF (25 % / 25 % / 25 % / 25 %)" },
+      { k: "Regimfilter",     v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Rebalansering",   v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",  v: "15 bps per sida" },
+    ],
+    source: "Variant av D1-raw för att mäta diversifieringens effekt",
+  },
+  d1_composite: {
+    color: "#10b981",
+    tagline: "Bäst i sweep — blandar kortsiktig och långsiktig momentum 50/50",
+    description: "Rankar ETF:er som genomsnittet av deras 21-dagars och 84-dagars avkastning. Det korta fönstret fångar tidiga trender och leder till bättre positionering i mars–juni 2020 och november 2023 jämfört med ren 84d-momentum.",
+    params: [
+      { k: "Metric",          v: "Composite — 50 % × ret(21d) + 50 % × ret(84d)" },
+      { k: "Urval",           v: "Top 1 + Top 1" },
+      { k: "Regimfilter",     v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Rebalansering",   v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",  v: "15 bps per sida" },
+    ],
+    source: "Vinnare ur 40-run DEL1-3 sweep (Sharpe 1.18 vs 1.13 för raw-84d)",
+  },
+  d2_composite: {
+    color: "#34d399",
+    tagline: "Composite-signal, 2 picks per sleeve",
+    description: "Samma composite-metrik som D1-composite (50 % × 21d + 50 % × 84d) men väljer top 2 ur varje sleeve. Ger liknande Sharpe som D1-composite med något lägre CAGR och mer gradvis allokationsförändring.",
+    params: [
+      { k: "Metric",          v: "Composite — 50 % × ret(21d) + 50 % × ret(84d)" },
+      { k: "Urval",           v: "Top 2 + Top 2" },
+      { k: "Regimfilter",     v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Rebalansering",   v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",  v: "15 bps per sida" },
+    ],
+    source: "Variant av D1-composite för att mäta diversifieringens effekt",
+  },
+  d1_accel: {
+    color: "#f59e0b",
+    tagline: "Premierar tillgångar vars momentum ökar — inte bara högt momentum",
+    description: "Utgår från en mjukad prisserie (EMA-5 av mediapriset (H+L)/2) för att filtrera bort daglig brus. Beräknar sedan ROC (Rate of Change) över 84 dagar på den mjuka serien, plus en accelerationsterm: avkastningen de senaste 15 dagarna minus avkastningen de 15 dagarna dessförinnan. Tillgångar med stigande momentum rankas dubbelt belönade.",
+    params: [
+      { k: "Metric",          v: "Accelerated momentum: ROC(84d) + Accel(15d)" },
+      { k: "Prisserie",       v: "EMA(5) av (High + Low) / 2 — filtrerar daglig brus" },
+      { k: "ROC-fönster",     v: "84 handelsdagar (~4 månader)" },
+      { k: "Accel-fönster",   v: "15 dagar — ROC(0→15d) minus ROC(−15→0d)" },
+      { k: "Urval",           v: "Top 1 + Top 1" },
+      { k: "Regimfilter",     v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Handelskostnad",  v: "15 bps per sida" },
+    ],
+    source: "Optimerad via 160-run sweep (5 lb × 4 win × 4 ema × D1/D2) — ema=5, lb=84, win=15 gav Sharpe 1.27",
+  },
+  d2_accel: {
+    color: "#fcd34d",
+    tagline: "Accelerated momentum, 2 picks per sleeve",
+    description: "Identisk accel-metrik som D1-accel (EMA-5 mediapris, ROC 84d + acceleration 15d) men väljer top 2 ur varje sleeve. Något lägre CAGR men lägre maximal nedgång.",
+    params: [
+      { k: "Metric",          v: "Accelerated momentum: ROC(84d) + Accel(15d)" },
+      { k: "Prisserie",       v: "EMA(5) av (High + Low) / 2" },
+      { k: "Urval",           v: "Top 2 + Top 2" },
+      { k: "Regimfilter",     v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Handelskostnad",  v: "15 bps per sida" },
+    ],
+    source: "D2-variant av D1-accel",
+  },
+  d1_lowcorr: {
+    color: "#f43f5e",
+    tagline: "Begränsar sektorsleeven till defensiva, lågkorrelerade sektorer",
+    description: "Exkluderar sektorer som tenderar att gå ihop i marknadsnedgångar (IT, Industrials, Materials, Consumer Discretionary) och tillåter bara rotation bland de 5 minst korrelerade S&amp;P 500-sektorerna. Faktor-sleeven är oförändrad. Ger lägre beta och bättre riskjusterad avkastning i nedgångsfaser.",
+    params: [
+      { k: "Metric",           v: "Raw return — 84 dagars avkastning" },
+      { k: "Urval",            v: "Top 1 faktor + Top 1 sektor (50 % / 50 %)" },
+      { k: "Faktor-universum", v: "Oförändrat — samma 8 faktor-ETF:er" },
+      { k: "Sektor-universum", v: "Energy (QDVF.DE) · Utilities (QDVH.DE) · Cons.Staples (2B7D.DE) · Communication Services (XLC) · Healthcare (QDVG.DE)" },
+      { k: "Exkluderade",      v: "IT · Consumer Discretionary · Industrials · Materials" },
+      { k: "Regimfilter",      v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Handelskostnad",   v: "15 bps per sida" },
+    ],
+    source: "Optimerad via 42-run sweep B — 'no_gold + raw sel=84' gav Sharpe 1.30, CAGR 18.2 %",
+  },
+  d2_lowcorr: {
+    color: "#fb7185",
+    tagline: "Low-corr sektoruniverse, 2 picks per sleeve",
+    description: "Identisk universum-begränsning som D1-low-corr men väljer top 2 ur varje sleeve. Ger bredare exponering mot de defensiva sektorerna.",
+    params: [
+      { k: "Metric",           v: "Raw return — 84 dagars avkastning" },
+      { k: "Urval",            v: "Top 2 + Top 2" },
+      { k: "Sektor-universum", v: "Energy · Utilities · Cons.Staples · Comms. · Healthcare" },
+      { k: "Regimfilter",      v: "IWDA.L vs IBTS.L — 84d" },
+      { k: "Handelskostnad",   v: "15 bps per sida" },
+    ],
+    source: "D2-variant av D1-low-corr",
+  },
+};
+
 // ── Palette ────────────────────────────────────────────────────────
 const SERIES_CFG = {
   top1_top1:    { label: "D1 — raw",         color: "#5b6ef5", width: 1.6 },
@@ -335,20 +449,23 @@ function renderMainChart() {
 
 // ── Signal cards ───────────────────────────────────────────────────
 function renderSignalCards() {
-  renderSignalCard("signal-d1",    DATA?.strategies?.top1_top1,    "D1 — raw");
-  renderSignalCard("signal-d1c",   DATA?.strategies?.d1_composite, "D1-composite");
-  renderSignalCard("signal-d1a",   DATA?.strategies?.d1_accel,     "D1-accel.");
-  renderSignalCard("signal-d1lc",  DATA?.strategies?.d1_lowcorr,   "D1-low-corr.");
-  renderSignalCard("signal-d2",    DATA?.strategies?.top2_top2,    "D2 — raw");
-  renderSignalCard("signal-d2c",   DATA?.strategies?.d2_composite, "D2-composite");
-  renderSignalCard("signal-d2a",   DATA?.strategies?.d2_accel,     "D2-accel.");
-  renderSignalCard("signal-d2lc",  DATA?.strategies?.d2_lowcorr,   "D2-low-corr.");
+  renderSignalCard("signal-d1",    DATA?.strategies?.top1_top1,    "D1 — raw",      "top1_top1");
+  renderSignalCard("signal-d1c",   DATA?.strategies?.d1_composite, "D1-composite",  "d1_composite");
+  renderSignalCard("signal-d1a",   DATA?.strategies?.d1_accel,     "D1-accel.",     "d1_accel");
+  renderSignalCard("signal-d1lc",  DATA?.strategies?.d1_lowcorr,   "D1-low-corr.",  "d1_lowcorr");
+  renderSignalCard("signal-d2",    DATA?.strategies?.top2_top2,    "D2 — raw",      "top2_top2");
+  renderSignalCard("signal-d2c",   DATA?.strategies?.d2_composite, "D2-composite",  "d2_composite");
+  renderSignalCard("signal-d2a",   DATA?.strategies?.d2_accel,     "D2-accel.",     "d2_accel");
+  renderSignalCard("signal-d2lc",  DATA?.strategies?.d2_lowcorr,   "D2-low-corr.",  "d2_lowcorr");
 }
 
-function renderSignalCard(elId, strat, title) {
+function renderSignalCard(elId, strat, title, key) {
   const el = document.getElementById(elId);
   if (!strat?.current_signal) { el.innerHTML = ""; return; }
   const { date, holdings } = strat.current_signal;
+  const spec  = STRATEGY_SPECS[key];
+  const color = spec?.color || SERIES_CFG[key]?.color || "#64748b";
+
   const rows = (holdings || []).map(h => {
     const pct = Math.round(h.weight * 100);
     return `
@@ -374,12 +491,83 @@ function renderSignalCard(elId, strat, title) {
         </div>
       </div>`;
   }).join("");
+
   el.innerHTML = `
     <div class="flex items-center justify-between mb-3">
-      <p class="text-xs font-medium text-muted uppercase tracking-widest">${title}</p>
+      <button onclick="openSpecModal('${key}')"
+              class="flex items-center gap-2 group text-left">
+        <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
+        <span class="text-xs font-semibold tracking-widest uppercase transition-colors"
+              style="color:${color}">${title}</span>
+        <svg class="w-3 h-3 text-muted group-hover:text-slate-400 transition-colors flex-shrink-0"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+        </svg>
+      </button>
       <span class="text-xs text-muted">${date}</span>
     </div>
-    ${rows || '<p class="text-xs text-muted italic">Cash — regime filter off</p>'}`;
+    ${rows || '<p class="text-xs text-muted italic">Kontanter — regimfilter aktivt</p>'}`;
+}
+
+// ── Strategy spec modal ────────────────────────────────────────────
+function openSpecModal(key) {
+  const spec = STRATEGY_SPECS[key];
+  if (!spec) return;
+  const st   = DATA?.strategies?.[key]?.stats;
+  const color = spec.color;
+
+  function pct(v) { return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%"; }
+  function colorStyle(v) { return v == null ? "color:#4a5170" : v >= 0 ? "color:#10b981" : "color:#f43f5e"; }
+
+  const statsHtml = st ? `
+    <div class="grid grid-cols-3 gap-3 mt-4">
+      <div class="bg-surface rounded-lg p-3 text-center">
+        <p class="text-xs text-muted mb-1">CAGR</p>
+        <p class="text-base font-semibold" style="${colorStyle(st.cagr)}">${pct(st.cagr)}</p>
+      </div>
+      <div class="bg-surface rounded-lg p-3 text-center">
+        <p class="text-xs text-muted mb-1">Sharpe</p>
+        <p class="text-base font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p>
+      </div>
+      <div class="bg-surface rounded-lg p-3 text-center">
+        <p class="text-xs text-muted mb-1">Max DD (mo)</p>
+        <p class="text-base font-semibold" style="color:#fb923c">${pct(st.max_dd_monthly)}</p>
+      </div>
+    </div>` : "";
+
+  const paramsHtml = spec.params.map(p => `
+    <tr class="border-t border-border">
+      <td class="py-2 pr-4 text-xs text-muted font-medium w-40 align-top">${p.k}</td>
+      <td class="py-2 text-xs text-slate-300">${p.v}</td>
+    </tr>`).join("");
+
+  document.getElementById("spec-modal-content").innerHTML = `
+    <div class="flex items-center gap-3 mb-4">
+      <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
+      <h2 class="text-base font-semibold text-slate-200">${SERIES_CFG[key]?.label || key}</h2>
+    </div>
+    <p class="text-xs text-slate-400 italic mb-4">${spec.tagline}</p>
+    <p class="text-xs text-slate-400 leading-relaxed mb-4">${spec.description}</p>
+    ${statsHtml}
+    <div class="mt-5">
+      <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-2">Parametrar</p>
+      <table class="w-full border-collapse">
+        <tbody>${paramsHtml}</tbody>
+      </table>
+    </div>
+    <div class="mt-4 pt-4 border-t border-border">
+      <p class="text-xs text-muted leading-relaxed">
+        <span class="font-medium text-slate-500">Källa: </span>${spec.source}
+      </p>
+    </div>`;
+
+  const modal = document.getElementById("spec-modal");
+  modal.classList.remove("hidden");
+  modal.focus();
+}
+
+function closeSpecModal() {
+  document.getElementById("spec-modal").classList.add("hidden");
 }
 
 function copyISIN(isin, btn) {
@@ -423,8 +611,16 @@ function renderStats() {
     return `
       <div class="bg-panel border border-border rounded-lg p-4">
         <div class="flex items-center gap-2 mb-3">
-          <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
-          <span class="text-xs font-semibold tracking-widest text-slate-400 uppercase">${label}</span>
+          <button onclick="openSpecModal('${key}')"
+                  class="flex items-center gap-2 group text-left">
+            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
+            <span class="text-xs font-semibold tracking-widest uppercase transition-colors group-hover:text-slate-200"
+                  style="color:${color}">${label}</span>
+            <svg class="w-3 h-3 text-muted group-hover:text-slate-400 transition-colors"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+            </svg>
+          </button>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>

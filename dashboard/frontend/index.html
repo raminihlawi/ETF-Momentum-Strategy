@@ -115,6 +115,21 @@
   </div>
 </div>
 
+<!-- ── Strategy Spec Modal ─────────────────────────────────────── -->
+<div id="spec-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4"
+     onkeydown="if(event.key==='Escape')closeSpecModal()">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeSpecModal()"></div>
+  <div class="relative bg-panel border border-border rounded-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto shadow-2xl">
+    <button onclick="closeSpecModal()"
+            class="absolute top-4 right-4 text-muted hover:text-slate-300 transition-colors z-10">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+    <div id="spec-modal-content" class="p-6"></div>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

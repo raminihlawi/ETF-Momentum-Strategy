@@ -42,8 +42,8 @@ BENCHMARKS = {
 }
 
 # ── Accelerated momentum parameters ───────────────────────────────
-ACCEL_LOOKBACK = 63   # ROC window (trading days)
-ACCEL_WINDOW   = 10   # days for each acceleration half-window
+ACCEL_LOOKBACK = 84   # ROC window (trading days)  — optimized via 160-run sweep
+ACCEL_WINDOW   = 15   # days for each acceleration half-window — optimized
 EMA_SPAN       = 5    # smoothing span for median price
 
 # ── Low-correlation basket ─────────────────────────────────────────
@@ -492,27 +492,27 @@ def run(cfg: dict = None, use_cache: bool = False):
     prices_smooth = compute_smooth_prices(prices_high, prices_low, prices_raw,
                                           strategy_cols, ter_map)
 
-    # Low-corr basket universe
+    # Low-corr basket universe — "no_gold" variant (best from sweep B)
+    # Normal factor sleeve; sector restricted to 5 low-corr sectors, no GLD
     lc_sector_t = (
         [(lbl, t) for lbl, t in sector_t if lbl in LOW_CORR_SECTOR_KEEP]
         + [(lbl, v["ticker"]) for lbl, v in LOW_CORR_EXTRA.items() if lbl != "GOLD"]
-        + [("GOLD", LOW_CORR_EXTRA["GOLD"]["ticker"])]
     )
-    lc_factor_t = factor_t + [("GOLD", LOW_CORR_EXTRA["GOLD"]["ticker"])]
+    lc_factor_t = factor_t   # unchanged — no GLD in factor sleeve
 
     def bt(f_t, s_t, n_f, n_s, metric, label):
         log.info(f"Running {label}...")
         return run_backtest(prices_adj, f_t, s_t, regime_t, regime_compare_t, cash_t,
                             n_f, n_s, metric, prices_smooth)
 
-    eq1,   al1   = bt(factor_t,   sector_t,   1, 1, "raw",                  "D1-raw")
-    eq2,   al2   = bt(factor_t,   sector_t,   2, 2, "raw",                  "D2-raw")
-    eq1c,  al1c  = bt(factor_t,   sector_t,   1, 1, "composite",            "D1-composite")
-    eq2c,  al2c  = bt(factor_t,   sector_t,   2, 2, "composite",            "D2-composite")
-    eq1a,  al1a  = bt(factor_t,   sector_t,   1, 1, "accelerated_momentum", "D1-accel")
-    eq2a,  al2a  = bt(factor_t,   sector_t,   2, 2, "accelerated_momentum", "D2-accel")
-    eq1lc, al1lc = bt(lc_factor_t, lc_sector_t, 1, 1, "composite",          "D1-lowcorr")
-    eq2lc, al2lc = bt(lc_factor_t, lc_sector_t, 2, 2, "composite",          "D2-lowcorr")
+    eq1,   al1   = bt(factor_t,    sector_t,    1, 1, "raw",                  "D1-raw")
+    eq2,   al2   = bt(factor_t,    sector_t,    2, 2, "raw",                  "D2-raw")
+    eq1c,  al1c  = bt(factor_t,    sector_t,    1, 1, "composite",            "D1-composite")
+    eq2c,  al2c  = bt(factor_t,    sector_t,    2, 2, "composite",            "D2-composite")
+    eq1a,  al1a  = bt(factor_t,    sector_t,    1, 1, "accelerated_momentum", "D1-accel")
+    eq2a,  al2a  = bt(factor_t,    sector_t,    2, 2, "accelerated_momentum", "D2-accel")
+    eq1lc, al1lc = bt(lc_factor_t, lc_sector_t, 1, 1, "raw",                 "D1-lowcorr")
+    eq2lc, al2lc = bt(lc_factor_t, lc_sector_t, 2, 2, "raw",                 "D2-lowcorr")
 
     # Benchmark raw close series (no TER)
     benchmarks_out = {}
