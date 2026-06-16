@@ -3,10 +3,14 @@
 
 // ── Palette ────────────────────────────────────────────────────────
 const SERIES_CFG = {
-  top1_top1:    { label: "D1 — raw",         color: "#5b6ef5", width: 1.8 },
-  top2_top2:    { label: "D2 — raw",         color: "#a78bfa", width: 1.8 },
+  top1_top1:    { label: "D1 — raw",         color: "#5b6ef5", width: 1.6 },
+  top2_top2:    { label: "D2 — raw",         color: "#a78bfa", width: 1.6 },
   d1_composite: { label: "D1-composite",     color: "#10b981", width: 2.2 },
   d2_composite: { label: "D2-composite",     color: "#34d399", width: 2.2 },
+  d1_accel:     { label: "D1-accel.",        color: "#f59e0b", width: 2.0 },
+  d2_accel:     { label: "D2-accel.",        color: "#fcd34d", width: 2.0 },
+  d1_lowcorr:   { label: "D1-low-corr.",     color: "#f43f5e", width: 2.0 },
+  d2_lowcorr:   { label: "D2-low-corr.",     color: "#fb7185", width: 2.0 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
@@ -21,7 +25,7 @@ const ALLOC_PALETTE = [
 // ── State ──────────────────────────────────────────────────────────
 let DATA = null;
 let CONFIG = null;
-let activeKeys = new Set(["top1_top1", "top2_top2", "d1_composite", "d2_composite", "MSCI World"]);
+let activeKeys = new Set(["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "MSCI World"]);
 let mainChart = null;
 
 // ── Init ───────────────────────────────────────────────────────────
@@ -170,7 +174,8 @@ function renderMainChart() {
   // Same ETF always gets the same color regardless of which strip it's in.
   const tickerColorMap = {};
   let colorIdx = 0;
-  for (const sk of ["top1_top1", "top2_top2", "d1_composite", "d2_composite"]) {
+  for (const sk of ["top1_top1", "top2_top2", "d1_composite", "d2_composite",
+                    "d1_accel", "d2_accel", "d1_lowcorr", "d2_lowcorr"]) {
     const alloc = DATA?.strategies?.[sk]?.allocation;
     if (!alloc?.tickers) continue;
     alloc.tickers.forEach((t, i) => {
@@ -221,7 +226,8 @@ function renderMainChart() {
       </div>`
     ).join("");
 
-    const allocSection = ["top1_top1", "d1_composite", "top2_top2", "d2_composite"].map(k => {
+    const allocSection = ["top1_top1", "d1_composite", "d1_accel", "d1_lowcorr",
+                          "top2_top2", "d2_composite", "d2_accel", "d2_lowcorr"].map(k => {
       const holdings = allocAtDate(k, dateStr);
       if (!holdings) return "";
       const c = SERIES_CFG[k] || {};
@@ -330,9 +336,13 @@ function renderMainChart() {
 // ── Signal cards ───────────────────────────────────────────────────
 function renderSignalCards() {
   renderSignalCard("signal-d1",    DATA?.strategies?.top1_top1,    "D1 — raw");
-  renderSignalCard("signal-d2",    DATA?.strategies?.top2_top2,    "D2 — raw");
   renderSignalCard("signal-d1c",   DATA?.strategies?.d1_composite, "D1-composite");
+  renderSignalCard("signal-d1a",   DATA?.strategies?.d1_accel,     "D1-accel.");
+  renderSignalCard("signal-d1lc",  DATA?.strategies?.d1_lowcorr,   "D1-low-corr.");
+  renderSignalCard("signal-d2",    DATA?.strategies?.top2_top2,    "D2 — raw");
   renderSignalCard("signal-d2c",   DATA?.strategies?.d2_composite, "D2-composite");
+  renderSignalCard("signal-d2a",   DATA?.strategies?.d2_accel,     "D2-accel.");
+  renderSignalCard("signal-d2lc",  DATA?.strategies?.d2_lowcorr,   "D2-low-corr.");
 }
 
 function renderSignalCard(elId, strat, title) {
@@ -389,10 +399,14 @@ function renderStats() {
 
   // ── Summary metrics ──────────────────────────────────────────────
   const STRATS = [
-    { key: "top1_top1",    label: "D1 — raw",      color: "#5b6ef5" },
-    { key: "d1_composite", label: "D1-composite",   color: "#10b981" },
-    { key: "top2_top2",    label: "D2 — raw",      color: "#a78bfa" },
-    { key: "d2_composite", label: "D2-composite",   color: "#34d399" },
+    { key: "top1_top1",    label: "D1 — raw",       color: "#5b6ef5" },
+    { key: "d1_composite", label: "D1-composite",    color: "#10b981" },
+    { key: "d1_accel",     label: "D1-accel.",       color: "#f59e0b" },
+    { key: "d1_lowcorr",   label: "D1-low-corr.",    color: "#f43f5e" },
+    { key: "top2_top2",    label: "D2 — raw",       color: "#a78bfa" },
+    { key: "d2_composite", label: "D2-composite",    color: "#34d399" },
+    { key: "d2_accel",     label: "D2-accel.",       color: "#fcd34d" },
+    { key: "d2_lowcorr",   label: "D2-low-corr.",    color: "#fb7185" },
   ];
 
   function pct(v, decimals = 1) {
@@ -478,12 +492,11 @@ function renderStats() {
   const annualSection = `
     <div class="bg-panel border border-border rounded-lg p-4">
       <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per Year — full-period summary in the cards above</p>
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        ${annualTable(STRATS[0])}${annualTable(STRATS[1])}
-      </div>
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-        ${annualTable(STRATS[2])}${annualTable(STRATS[3])}
-      </div>
+      ${[0,2,4,6].map(i => `
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 ${i > 0 ? 'mt-6' : ''}">
+          ${STRATS[i] ? annualTable(STRATS[i]) : ""}
+          ${STRATS[i+1] ? annualTable(STRATS[i+1]) : ""}
+        </div>`).join("")}
     </div>`;
 
   // ── Monthly heatmap ──────────────────────────────────────────────

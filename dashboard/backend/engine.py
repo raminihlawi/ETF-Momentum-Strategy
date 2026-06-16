@@ -41,6 +41,19 @@ BENCHMARKS = {
     "S&P 500":    "^GSPC",
 }
 
+# ── Accelerated momentum parameters ───────────────────────────────
+ACCEL_LOOKBACK = 63   # ROC window (trading days)
+ACCEL_WINDOW   = 10   # days for each acceleration half-window
+EMA_SPAN       = 5    # smoothing span for median price
+
+# ── Low-correlation basket ─────────────────────────────────────────
+LOW_CORR_EXTRA = {
+    "UTILITIES": {"ticker": "QDVH.DE", "nordnet_name": "iShares S&P 500 Utilities Sector UCITS ETF",          "isin": "IE00B4KBBD01", "ter_pct": 0.15},
+    "COMMS":     {"ticker": "XLC",     "nordnet_name": "SPDR S&P 500 Communication Services Select Sector ETF", "isin": "US78468R6633", "ter_pct": 0.10},
+    "GOLD":      {"ticker": "GLD",     "nordnet_name": "SPDR Gold Shares",                                      "isin": "US78463V1070", "ter_pct": 0.40},
+}
+LOW_CORR_SECTOR_KEEP = {"ENERGY", "HEALTHCARE", "CONS STAP"}  # kept from main config
+
 # Fallback TER rates if not in config (annual %)
 DEFAULT_TER = {
     "IWVL.L": 0.25, "IWQU.L": 0.25, "IWMO.L": 0.25, "WSML.L": 0.35,
@@ -76,24 +89,36 @@ def parse_config(cfg: dict) -> tuple:
 
 
 # ── Price data ─────────────────────────────────────────────────────
-def fetch_prices(tickers: list, use_cache: bool = False) -> pd.DataFrame:
+def fetch_prices(tickers: list, use_cache: bool = False) -> dict:
+    """Returns {"close": df, "high": df, "low": df}."""
     if use_cache and CACHE_PATH.exists():
-        log.info("Using cached prices")
-        return pd.read_pickle(CACHE_PATH)
+        try:
+            cached = pd.read_pickle(CACHE_PATH)
+            if isinstance(cached, dict) and "close" in cached:
+                log.info("Using cached prices (OHLC)")
+                return cached
+        except Exception:
+            pass
+        log.info("Cache format outdated, re-downloading")
 
     log.info(f"Downloading {len(tickers)} tickers from yfinance...")
     raw = yf.download(tickers, start=DL_FROM, progress=False,
                       auto_adjust=True, threads=True)
     if isinstance(raw.columns, pd.MultiIndex):
         close = raw["Close"]
+        high  = raw["High"]
+        low   = raw["Low"]
     else:
-        # Single ticker
-        close = raw[["Close"]].rename(columns={"Close": tickers[0]})
+        t0    = tickers[0]
+        close = raw[["Close"]].rename(columns={"Close": t0})
+        high  = raw[["High"]].rename(columns={"High":  t0})
+        low   = raw[["Low"]].rename(columns={"Low":   t0})
 
-    close = close.ffill()
-    close.to_pickle(CACHE_PATH)
+    close, high, low = close.ffill(), high.ffill(), low.ffill()
+    result = {"close": close, "high": high, "low": low}
+    pd.to_pickle(result, CACHE_PATH)
     log.info(f"  Downloaded {close.shape[1]} tickers × {len(close)} days")
-    return close
+    return result
 
 
 def apply_ter(prices: pd.DataFrame, ter_map: dict) -> pd.DataFrame:
@@ -106,6 +131,21 @@ def apply_ter(prices: pd.DataFrame, ter_map: dict) -> pd.DataFrame:
             n = len(result)
             result[col] *= daily_drag ** np.arange(n)
     return result
+
+
+def compute_smooth_prices(prices_high: pd.DataFrame, prices_low: pd.DataFrame,
+                          prices_close: pd.DataFrame,
+                          strategy_cols: list, ter_map: dict) -> pd.DataFrame:
+    """EMA(EMA_SPAN) of TER-adjusted (High+Low)/2 for strategy tickers."""
+    cols = [c for c in strategy_cols
+            if c in prices_high.columns and c in prices_low.columns]
+    median = (prices_high[cols] + prices_low[cols]) / 2
+    # Fall back to close for tickers missing H/L
+    for c in strategy_cols:
+        if c not in cols and c in prices_close.columns:
+            median[c] = prices_close[c]
+    median_adj = apply_ter(median, ter_map)
+    return median_adj.ewm(span=EMA_SPAN, adjust=False).mean()
 
 
 # ── Backtest ───────────────────────────────────────────────────────
@@ -132,6 +172,36 @@ def score_composite(ticker: str, d, prices: pd.DataFrame, pos_map: dict,
     return 0.5 * (p_now / p_21 - 1) + 0.5 * (p_now / p_84 - 1)
 
 
+def score_accel(ticker: str, d, smooth: pd.DataFrame, pos_map: dict) -> float:
+    """
+    Accelerated momentum on EMA-smoothed median price.
+    Score = ROC(ACCEL_LOOKBACK) + Acceleration
+    where Acceleration = ROC(last ACCEL_WINDOW days) - ROC(prior ACCEL_WINDOW days).
+    Assets with rising momentum (positive acceleration) are rewarded.
+    """
+    if ticker == "CASH":
+        return 0.0
+    pos = pos_map.get(d, -1)
+    min_pos = max(ACCEL_LOOKBACK, 2 * ACCEL_WINDOW)
+    if pos < min_pos or ticker not in smooth.columns:
+        return np.nan
+
+    try:
+        p_now  = float(smooth.iloc[pos][ticker])
+        p_lb   = float(smooth.iloc[pos - ACCEL_LOOKBACK][ticker])
+        p_w    = float(smooth.iloc[pos - ACCEL_WINDOW][ticker])
+        p_2w   = float(smooth.iloc[pos - 2 * ACCEL_WINDOW][ticker])
+    except Exception:
+        return np.nan
+
+    if any(v <= 0 for v in [p_now, p_lb, p_w, p_2w]):
+        return np.nan
+
+    roc   = p_now / p_lb - 1
+    accel = (p_now / p_w - 1) - (p_w / p_2w - 1)
+    return roc + accel
+
+
 def run_backtest(prices: pd.DataFrame,
                  factor_tickers: list,   # [(label, ticker), ...]
                  sector_tickers: list,
@@ -140,7 +210,8 @@ def run_backtest(prices: pd.DataFrame,
                  cash_ticker: str,            # "CASH" = synthetic flat (0% return)
                  n_factor: int = 1,
                  n_sector: int = 1,
-                 metric: str = "raw") -> tuple:
+                 metric: str = "raw",
+                 prices_smooth: pd.DataFrame = None) -> tuple:
     """
     Dual-sleeve monthly rotation.
     metric: "raw" uses SEL_LB-day return; "composite" uses 50% 21d + 50% 84d return.
@@ -190,6 +261,10 @@ def run_backtest(prices: pd.DataFrame,
     def score(ticker):
         if metric == "composite":
             return score_composite(ticker, d, prices, pos_map)
+        if metric == "accelerated_momentum":
+            if prices_smooth is not None:
+                return score_accel(ticker, d, prices_smooth, pos_map)
+            return np.nan
         return ret_lb(ticker, d, SEL_LB)
 
     for d in sim_dates:
@@ -391,30 +466,53 @@ def run(cfg: dict = None, use_cache: bool = False):
 
     factor_t, sector_t, regime_t, regime_compare_t, cash_t, ter_map = parse_config(cfg)
 
+    # Low-corr extra tickers: add to download list + TER map
+    lc_tickers = [v["ticker"] for v in LOW_CORR_EXTRA.values()]
+    for v in LOW_CORR_EXTRA.values():
+        ter_map.setdefault(v["ticker"], v["ter_pct"])
+
     strategy_tickers = ([t for _, t in factor_t] + [t for _, t in sector_t]
                         + [regime_t, regime_compare_t]
-                        + ([cash_t] if cash_t != "CASH" else []))
-    bench_tickers    = list(set(BENCHMARKS.values()))
-    all_dl_tickers   = list(dict.fromkeys(strategy_tickers + bench_tickers))
+                        + ([cash_t] if cash_t != "CASH" else [])
+                        + lc_tickers)
+    bench_tickers  = list(set(BENCHMARKS.values()))
+    all_dl_tickers = list(dict.fromkeys(strategy_tickers + bench_tickers))
 
-    prices_raw = fetch_prices(all_dl_tickers, use_cache=use_cache)
+    prices_dict = fetch_prices(all_dl_tickers, use_cache=use_cache)
+    prices_raw  = prices_dict["close"]
+    prices_high = prices_dict.get("high", prices_raw)
+    prices_low  = prices_dict.get("low",  prices_raw)
 
-    # Apply TER only to strategy tickers
+    # Apply TER to Close prices for all strategy tickers
     strategy_cols = [t for t in strategy_tickers if t in prices_raw.columns]
     prices_adj    = prices_raw.copy()
     prices_adj[strategy_cols] = apply_ter(prices_raw[strategy_cols], ter_map)
 
-    log.info("Running D1 (raw top1/top1)...")
-    eq1, al1 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 1, 1, "raw")
+    # EMA-smoothed median prices for accelerated_momentum scoring
+    prices_smooth = compute_smooth_prices(prices_high, prices_low, prices_raw,
+                                          strategy_cols, ter_map)
 
-    log.info("Running D2 (raw top2/top2)...")
-    eq2, al2 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 2, 2, "raw")
+    # Low-corr basket universe
+    lc_sector_t = (
+        [(lbl, t) for lbl, t in sector_t if lbl in LOW_CORR_SECTOR_KEEP]
+        + [(lbl, v["ticker"]) for lbl, v in LOW_CORR_EXTRA.items() if lbl != "GOLD"]
+        + [("GOLD", LOW_CORR_EXTRA["GOLD"]["ticker"])]
+    )
+    lc_factor_t = factor_t + [("GOLD", LOW_CORR_EXTRA["GOLD"]["ticker"])]
 
-    log.info("Running D1-composite (top1/top1)...")
-    eq1c, al1c = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 1, 1, "composite")
+    def bt(f_t, s_t, n_f, n_s, metric, label):
+        log.info(f"Running {label}...")
+        return run_backtest(prices_adj, f_t, s_t, regime_t, regime_compare_t, cash_t,
+                            n_f, n_s, metric, prices_smooth)
 
-    log.info("Running D2-composite (top2/top2)...")
-    eq2c, al2c = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 2, 2, "composite")
+    eq1,   al1   = bt(factor_t,   sector_t,   1, 1, "raw",                  "D1-raw")
+    eq2,   al2   = bt(factor_t,   sector_t,   2, 2, "raw",                  "D2-raw")
+    eq1c,  al1c  = bt(factor_t,   sector_t,   1, 1, "composite",            "D1-composite")
+    eq2c,  al2c  = bt(factor_t,   sector_t,   2, 2, "composite",            "D2-composite")
+    eq1a,  al1a  = bt(factor_t,   sector_t,   1, 1, "accelerated_momentum", "D1-accel")
+    eq2a,  al2a  = bt(factor_t,   sector_t,   2, 2, "accelerated_momentum", "D2-accel")
+    eq1lc, al1lc = bt(lc_factor_t, lc_sector_t, 1, 1, "composite",          "D1-lowcorr")
+    eq2lc, al2lc = bt(lc_factor_t, lc_sector_t, 2, 2, "composite",          "D2-lowcorr")
 
     # Benchmark raw close series (no TER)
     benchmarks_out = {}
@@ -424,38 +522,27 @@ def run(cfg: dict = None, use_cache: bool = False):
             "series": prices_to_series(prices_raw, t),
         }
 
+    def strat_entry(label, eq, al):
+        return {
+            "label":          label,
+            "nav":            eq,
+            "stats":          compute_stats(eq),
+            "allocation":     alloc_to_matrix(al),
+            "current_signal": current_signal(al, cfg),
+        }
+
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "start_date":   START,
         "strategies": {
-            "top1_top1": {
-                "label":          "D1 — top1/top1",
-                "nav":            eq1,
-                "stats":          compute_stats(eq1),
-                "allocation":     alloc_to_matrix(al1),
-                "current_signal": current_signal(al1, cfg),
-            },
-            "top2_top2": {
-                "label":          "D2 — top2/top2",
-                "nav":            eq2,
-                "stats":          compute_stats(eq2),
-                "allocation":     alloc_to_matrix(al2),
-                "current_signal": current_signal(al2, cfg),
-            },
-            "d1_composite": {
-                "label":          "D1-composite",
-                "nav":            eq1c,
-                "stats":          compute_stats(eq1c),
-                "allocation":     alloc_to_matrix(al1c),
-                "current_signal": current_signal(al1c, cfg),
-            },
-            "d2_composite": {
-                "label":          "D2-composite",
-                "nav":            eq2c,
-                "stats":          compute_stats(eq2c),
-                "allocation":     alloc_to_matrix(al2c),
-                "current_signal": current_signal(al2c, cfg),
-            },
+            "top1_top1":    strat_entry("D1 — raw",         eq1,   al1),
+            "top2_top2":    strat_entry("D2 — raw",         eq2,   al2),
+            "d1_composite": strat_entry("D1-composite",     eq1c,  al1c),
+            "d2_composite": strat_entry("D2-composite",     eq2c,  al2c),
+            "d1_accel":     strat_entry("D1-accel.",        eq1a,  al1a),
+            "d2_accel":     strat_entry("D2-accel.",        eq2a,  al2a),
+            "d1_lowcorr":   strat_entry("D1-low-corr.",    eq1lc, al1lc),
+            "d2_lowcorr":   strat_entry("D2-low-corr.",    eq2lc, al2lc),
         },
         "benchmarks":      benchmarks_out,
         "config_snapshot": cfg,
