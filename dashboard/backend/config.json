@@ -1,22 +1,24 @@
 {
   "factor_sleeve": {
-    "VALUE":    { "ticker": "IWVL.L", "nordnet_name": "Storebrand Global Multifaktor A SEK",       "isin": "NO0010714400", "ter_pct": 0.25 },
-    "QUALITY":  { "ticker": "IWQU.L", "nordnet_name": "Swedbank Robur Globalfond A",                "isin": "SE0000542714", "ter_pct": 0.25 },
-    "MOMENTUM": { "ticker": "IWMO.L", "nordnet_name": "Handelsbanken Global Momentum A",            "isin": "SE0015243167", "ter_pct": 0.25 },
-    "SMALLCAP": { "ticker": "WSML.L", "nordnet_name": "Handelsbanken Gl Småbolag Ind Crit A",      "isin": "SE0011308196", "ter_pct": 0.35 }
+    "USA MOM":   { "ticker": "QDVA.DE", "nordnet_name": "iShares Edge MSCI USA Momentum Factor UCITS ETF", "isin": "IE00BD1F4N50", "ter_pct": 0.20 },
+    "USA QUAL":  { "ticker": "QDVB.DE", "nordnet_name": "iShares Edge MSCI USA Quality Factor UCITS ETF",  "isin": "IE00BD1F4L37", "ter_pct": 0.20 },
+    "USA VAL":   { "ticker": "QDVI.DE", "nordnet_name": "iShares Edge MSCI USA Value Factor UCITS ETF",   "isin": "IE00BD1F4M44", "ter_pct": 0.20 },
+    "USA SMALL": { "ticker": "SXRG.DE", "nordnet_name": "iShares MSCI USA Small Cap ESG Enhanced CTB UCITS ETF", "isin": "IE00B3VWM098", "ter_pct": 0.18 },
+    "EUR MOM":   { "ticker": "CEMR.DE", "nordnet_name": "iShares Edge MSCI Europe Momentum Factor UCITS ETF", "isin": "IE00BQN1K786", "ter_pct": 0.25 },
+    "EUR QUAL":  { "ticker": "CEMQ.DE", "nordnet_name": "iShares Edge MSCI Europe Quality Factor UCITS ETF",  "isin": "IE00BQN1K562", "ter_pct": 0.25 },
+    "EUR VAL":   { "ticker": "CEMS.DE", "nordnet_name": "iShares Edge MSCI Europe Value Factor UCITS ETF",   "isin": "IE00BQN1K901", "ter_pct": 0.25 },
+    "EUR SMALL": { "ticker": "XXSC.DE", "nordnet_name": "Xtrackers MSCI Europe Small Cap UCITS ETF",         "isin": "LU0322253906", "ter_pct": 0.30 }
   },
   "sector_sleeve": {
-    "IT":           { "ticker": "IITU.L", "nordnet_name": "Länsförsäkringar Digitalisering A",     "isin": "SE0012455328", "ter_pct": 0.25 },
-    "ENERGY":       { "ticker": "IUES.L", "nordnet_name": "Plus Energi Marknad SEK",               "isin": "SE0015193156", "ter_pct": 0.25 },
-    "HEALTHCARE":   { "ticker": "IUHC.L", "nordnet_name": "Swedbank Robur Healthcare A",           "isin": "SE0000539124", "ter_pct": 0.25 },
-    "FINANCIALS":   { "ticker": "IUFS.L", "nordnet_name": "iShares S&P 500 Financials UCITS ETF", "isin": "IE00B4JNQZ49", "ter_pct": 0.25 },
-    "INDUSTRIALS":  { "ticker": "IUIS.L", "nordnet_name": "Handelsbanken Global Tema A",           "isin": "SE0015243159", "ter_pct": 0.25 },
-    "CONS_DISC":    { "ticker": "IUCD.L", "nordnet_name": "Swedbank Robur Konsumentfond A",        "isin": "SE0000563075", "ter_pct": 0.25 },
-    "CONS_STAP":    { "ticker": "IUCS.L", "nordnet_name": "Länsförsäkringar Konsument A",          "isin": "SE0009779701", "ter_pct": 0.25 },
-    "MATERIALS":    { "ticker": "IUMS.L", "nordnet_name": "Handelsbanken Råvarufond A",            "isin": "SE0001060750", "ter_pct": 0.25 },
-    "UTILITIES":    { "ticker": "IUUS.L", "nordnet_name": "Swedbank Robur Ny Teknik A",            "isin": "SE0000537967", "ter_pct": 0.25 },
-    "COMM":         { "ticker": "IUCM.L", "nordnet_name": "Länsförsäkringar Global A",             "isin": "SE0009779677", "ter_pct": 0.25 }
+    "IT":          { "ticker": "QDVE.DE", "nordnet_name": "iShares S&P 500 Information Technology Sector UCITS ETF", "isin": "IE00B3WJKG14", "ter_pct": 0.15 },
+    "ENERGY":      { "ticker": "QDVF.DE", "nordnet_name": "iShares S&P 500 Energy Sector UCITS ETF",                "isin": "IE00B42NKQ00", "ter_pct": 0.15 },
+    "HEALTHCARE":  { "ticker": "QDVG.DE", "nordnet_name": "iShares S&P 500 Health Care Sector UCITS ETF",           "isin": "IE00B43HR379", "ter_pct": 0.15 },
+    "CONS DISC":   { "ticker": "QDVK.DE", "nordnet_name": "iShares S&P 500 Consumer Discretionary Sector UCITS ETF","isin": "IE00B4MCHD36", "ter_pct": 0.15 },
+    "INDUSTRIALS": { "ticker": "2B7C.DE", "nordnet_name": "iShares S&P 500 Industrials Sector UCITS ETF",           "isin": "IE00B4LN9N13", "ter_pct": 0.15 },
+    "CONS STAP":   { "ticker": "2B7D.DE", "nordnet_name": "iShares S&P 500 Consumer Staples Sector UCITS ETF",      "isin": "IE00B40B8R38", "ter_pct": 0.15 },
+    "MATERIALS":   { "ticker": "2B7B.DE", "nordnet_name": "iShares S&P 500 Materials Sector UCITS ETF",             "isin": "IE00B4MKCJ84", "ter_pct": 0.15 }
   },
-  "regime_baseline": { "ticker": "IWDA.L" },
-  "cash_proxy":      { "ticker": "IBTS.L", "nordnet_name": "Kontanter / Sparkonto", "isin": "CASH", "ter_pct": 0.10 }
+  "regime_baseline":      { "ticker": "IWDA.L" },
+  "regime_cash_compare":  { "ticker": "IBTS.L" },
+  "cash_proxy":           { "ticker": "CASH",  "nordnet_name": "Kontanter", "isin": "CASH", "ter_pct": 0.0 }
 }

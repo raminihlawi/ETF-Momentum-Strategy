@@ -3,43 +3,30 @@
 
 // ── Palette ────────────────────────────────────────────────────────
 const SERIES_CFG = {
-  top1_top1:   { label: "D1 — top1/top1", color: "#5b6ef5", width: 2.2 },
-  top2_top2:   { label: "D2 — top2/top2", color: "#a78bfa", width: 2.2 },
-  "MSCI World":{ label: "MSCI World",      color: "#64748b", width: 1.4, dash: [4,3] },
-  "OMXS30":    { label: "OMXS30",          color: "#38bdf8", width: 1.4, dash: [4,3] },
-  "Nasdaq":    { label: "Nasdaq",           color: "#f59e0b", width: 1.4, dash: [4,3] },
-  "S&P 500":   { label: "S&P 500",         color: "#10b981", width: 1.4, dash: [4,3] },
+  top1_top1:    { label: "D1 — top1/top1", color: "#5b6ef5", width: 2.2 },
+  top2_top2:    { label: "D2 — top2/top2", color: "#a78bfa", width: 2.2 },
+  "MSCI World": { label: "MSCI World",     color: "#64748b", width: 1.4 },
+  "OMXS30":     { label: "OMXS30",         color: "#38bdf8", width: 1.4 },
+  "Nasdaq":     { label: "Nasdaq",          color: "#f59e0b", width: 1.4 },
+  "S&P 500":    { label: "S&P 500",        color: "#10b981", width: 1.4 },
 };
 
-// Distinct colors for allocation area chart
 const ALLOC_PALETTE = [
   "#5b6ef5","#a78bfa","#38bdf8","#10b981","#f59e0b",
-  "#f43f5e","#6ee7b7","#93c5fd","#fca5a5","#c4b5fd",
-  "#64748b",
+  "#f43f5e","#6ee7b7","#93c5fd","#fca5a5","#c4b5fd","#64748b",
 ];
 
 // ── State ──────────────────────────────────────────────────────────
 let DATA = null;
 let CONFIG = null;
 let activeKeys = new Set(["top1_top1", "top2_top2", "MSCI World"]);
-let allocStrategy = "top1_top1";
-let perfChart = null;
-let allocChart = null;
+let mainChart = null;
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
-  perfChart  = echarts.init(document.getElementById("perf-chart"),  null, { renderer: "canvas" });
-  allocChart = echarts.init(document.getElementById("alloc-chart"), null, { renderer: "canvas" });
-
-  window.addEventListener("resize", () => {
-    perfChart?.resize();
-    allocChart?.resize();
-  });
-
-  document.getElementById("start-date").addEventListener("change", () => {
-    if (DATA) renderPerfChart();
-  });
-
+  mainChart = echarts.init(document.getElementById("main-chart"), null, { renderer: "canvas" });
+  window.addEventListener("resize", () => mainChart?.resize());
+  document.getElementById("start-date").addEventListener("change", () => { if (DATA) renderMainChart(); });
   await loadData();
 });
 
@@ -49,7 +36,6 @@ function switchTab(tab) {
   document.getElementById("view-settings").classList.toggle("hidden",  tab !== "settings");
   document.getElementById("tab-dashboard").className = tab === "dashboard" ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
   document.getElementById("tab-settings").className  = tab === "settings"  ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
-
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -70,207 +56,62 @@ function renderAll() {
     ? new Date(DATA.generated_at).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" })
     : "unknown";
   document.getElementById("last-updated").textContent = "Updated " + ts;
-
   buildToggles();
-  renderPerfChart();
-  renderAllocChart();
+  renderMainChart();
   renderSignalCards();
+  renderStats();
 }
 
 // ── Series toggles ─────────────────────────────────────────────────
 function buildToggles() {
   const container = document.getElementById("series-toggles");
   container.innerHTML = "";
-
   const allKeys = [
     ...Object.keys(DATA.strategies || {}),
     ...Object.keys(DATA.benchmarks || {}),
   ];
-
   allKeys.forEach(key => {
-    const cfg = SERIES_CFG[key] || {};
-    const label = cfg.label || key;
-    const color = cfg.color || "#64748b";
+    const c = SERIES_CFG[key] || {};
+    const color = c.color || "#64748b";
     const on = activeKeys.has(key);
-
     const btn = document.createElement("button");
     btn.dataset.key = key;
-    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all " +
-      (on ? "border-transparent text-white" : "border-border text-muted");
-    btn.style.background = on ? color + "33" : "";
-    btn.style.borderColor = on ? color : "";
-    btn.style.color = on ? color : "";
-
+    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+    applyToggleStyle(btn, on, color);
     const dot = document.createElement("span");
     dot.className = "w-2 h-2 rounded-full flex-shrink-0";
     dot.style.background = color;
-
     btn.appendChild(dot);
-    btn.appendChild(document.createTextNode(label));
-    btn.addEventListener("click", () => toggleSeries(key, btn, color));
+    btn.appendChild(document.createTextNode(c.label || key));
+    btn.addEventListener("click", () => {
+      if (activeKeys.has(key)) activeKeys.delete(key); else activeKeys.add(key);
+      applyToggleStyle(btn, activeKeys.has(key), color);
+      renderMainChart();
+    });
     container.appendChild(btn);
   });
 }
 
-function toggleSeries(key, btn, color) {
-  if (activeKeys.has(key)) {
-    activeKeys.delete(key);
-    btn.style.background = "";
-    btn.style.borderColor = "";
-    btn.style.color = "";
-    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all border-border text-muted";
-  } else {
-    activeKeys.add(key);
-    btn.style.background = color + "33";
-    btn.style.borderColor = color;
-    btn.style.color = color;
-    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
-  }
-  renderPerfChart();
+function applyToggleStyle(btn, on, color) {
+  btn.style.background   = on ? color + "22" : "";
+  btn.style.borderColor  = on ? color : "#252a3d";
+  btn.style.color        = on ? color : "#4a5170";
 }
 
-// ── Allocation lookup (for tooltip) ───────────────────────────────
+
+// ── Allocation lookup ──────────────────────────────────────────────
 function allocAtDate(stratKey, dateStr) {
   const alloc = DATA?.strategies?.[stratKey]?.allocation;
   if (!alloc?.dates?.length) return null;
-  // Last rebalance date <= dateStr
   let idx = -1;
   for (let i = 0; i < alloc.dates.length; i++) {
-    if (alloc.dates[i] <= dateStr) idx = i;
-    else break;
+    if (alloc.dates[i] <= dateStr) idx = i; else break;
   }
   if (idx === -1) return null;
   const row = alloc.weights[idx];
   const holdings = {};
   alloc.tickers.forEach((t, i) => { if (row[i] > 0) holdings[t] = row[i]; });
   return holdings;
-}
-
-// ── Performance chart ──────────────────────────────────────────────
-function renderPerfChart() {
-  const startDate = document.getElementById("start-date").value;
-
-  function normalize(series) {
-    if (!series || !series.length) return [];
-    const idx = series.findIndex(p => p.date >= startDate);
-    if (idx === -1) return [];
-    const base = series[idx].value;
-    if (!base || base === 0) return [];
-    return series.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]);
-  }
-
-  const seriesList = [];
-
-  // Strategy NAV series
-  for (const [key, strat] of Object.entries(DATA.strategies || {})) {
-    if (!activeKeys.has(key)) continue;
-    const c = SERIES_CFG[key] || {};
-    seriesList.push({
-      name:      c.label || key,
-      type:      "line",
-      data:      normalize(strat.nav),
-      smooth:    false,
-      symbol:    "none",
-      lineStyle: { color: c.color, width: c.width || 2, type: c.dash ? "dashed" : "solid" },
-      itemStyle: { color: c.color },
-      z:         10,
-    });
-  }
-
-  // Benchmark series
-  for (const [name, bench] of Object.entries(DATA.benchmarks || {})) {
-    if (!activeKeys.has(name)) continue;
-    const c = SERIES_CFG[name] || {};
-    seriesList.push({
-      name:      c.label || name,
-      type:      "line",
-      data:      normalize(bench.series),
-      smooth:    false,
-      symbol:    "none",
-      lineStyle: { color: c.color, width: c.width || 1.5, type: "dashed" },
-      itemStyle: { color: c.color },
-      z:         5,
-    });
-  }
-
-  perfChart.setOption({
-    backgroundColor: "transparent",
-    animation:       false,
-    grid:   { top: 20, right: 20, bottom: 50, left: 55 },
-    xAxis:  {
-      type: "time",
-      axisLabel:  { color: "#4a5170", fontSize: 11 },
-      axisLine:   { lineStyle: { color: "#252a3d" } },
-      splitLine:  { show: false },
-      axisTick:   { lineStyle: { color: "#252a3d" } },
-    },
-    yAxis:  {
-      type: "value",
-      axisLabel:  { color: "#4a5170", fontSize: 11, formatter: v => v.toFixed(0) },
-      axisLine:   { show: false },
-      splitLine:  { lineStyle: { color: "#252a3d", type: "dashed" } },
-      axisTick:   { show: false },
-    },
-    tooltip: {
-      trigger:     "axis",
-      backgroundColor: "#1a1e2e",
-      borderColor: "#252a3d",
-      textStyle:   { color: "#c9d1e0", fontSize: 12 },
-      axisPointer: { type: "cross", crossStyle: { color: "#4a5170" } },
-      formatter(params) {
-        if (!params?.length) return "";
-        // axisValue on a time-type axis is epoch ms
-        const dateStr = new Date(params[0].axisValue).toISOString().slice(0, 10);
-
-        // Performance rows
-        const perfRows = params.map(p =>
-          `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:2px">
-            <span style="color:${p.color}">${p.seriesName}</span>
-            <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
-          </div>`
-        ).join("");
-
-        // Allocation rows — one block per active strategy
-        const stratKeys = ["top1_top1", "top2_top2"].filter(k => activeKeys.has(k));
-        const allocSection = stratKeys.map(k => {
-          const holdings = allocAtDate(k, dateStr);
-          if (!holdings) return "";
-          const c = SERIES_CFG[k] || {};
-          const items = Object.entries(holdings)
-            .map(([t, w]) =>
-              `<span style="background:#ffffff12;border-radius:3px;padding:1px 5px;margin-right:3px">
-                ${tickerLabel(t)} <span style="opacity:.7">${Math.round(w * 100)}%</span>
-              </span>`)
-            .join("");
-          return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #252a3d">
-            <div style="color:${c.color || "#4a5170"};margin-bottom:3px;font-size:10px">${c.label || k}</div>
-            <div style="line-height:1.9">${items}</div>
-          </div>`;
-        }).join("");
-
-        return `<div style="font-size:11px;max-width:280px">
-          <div style="color:#4a5170;margin-bottom:6px">${dateStr}</div>
-          ${perfRows}
-          ${allocSection}
-        </div>`;
-      },
-    },
-    series: seriesList,
-  }, true);
-}
-
-// ── Allocation chart ───────────────────────────────────────────────
-function setAllocStrategy(key) {
-  allocStrategy = key;
-  document.getElementById("alloc-btn-top1").className =
-    key === "top1_top1"
-      ? "text-xs px-2 py-0.5 rounded border border-accent text-accent"
-      : "text-xs px-2 py-0.5 rounded border border-border text-muted";
-  document.getElementById("alloc-btn-top2").className =
-    key === "top2_top2"
-      ? "text-xs px-2 py-0.5 rounded border border-accent text-accent"
-      : "text-xs px-2 py-0.5 rounded border border-border text-muted";
-  renderAllocChart();
 }
 
 function tickerLabel(ticker) {
@@ -283,48 +124,184 @@ function tickerLabel(ticker) {
   return ticker;
 }
 
-function renderAllocChart() {
-  const alloc = DATA?.strategies?.[allocStrategy]?.allocation;
-  if (!alloc || !alloc.dates?.length) return;
+// ── Combined chart (performance + D1 allocation + D2 allocation) ────
+function renderMainChart() {
+  const startDate = document.getElementById("start-date").value;
 
-  const { tickers, dates, weights } = alloc;
+  function normalize(series) {
+    if (!series?.length) return [];
+    const idx = series.findIndex(p => p.date >= startDate);
+    if (idx === -1) return [];
+    const base = series[idx].value;
+    if (!base) return [];
+    return series.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]);
+  }
 
-  const series = tickers.map((t, i) => ({
-    name:       tickerLabel(t),
-    type:       "line",
-    stack:      "total",
-    areaStyle:  { color: ALLOC_PALETTE[i % ALLOC_PALETTE.length], opacity: 0.85 },
-    lineStyle:  { width: 0 },
-    symbol:     "none",
-    emphasis:   { focus: "series" },
-    data:       weights.map((row, ri) => [dates[ri], +(row[i] * 100).toFixed(1)]),
-  }));
+  // ── Grid 0: performance series ────────────────────────────────────
+  const perfSeries = [];
+  for (const [key, strat] of Object.entries(DATA.strategies || {})) {
+    if (!activeKeys.has(key)) continue;
+    const c = SERIES_CFG[key] || {};
+    perfSeries.push({
+      name: c.label || key, type: "line",
+      data: normalize(strat.nav),
+      smooth: false, symbol: "none",
+      lineStyle: { color: c.color, width: c.width || 2 },
+      itemStyle: { color: c.color },
+      xAxisIndex: 0, yAxisIndex: 0, z: 10,
+    });
+  }
+  for (const [name, bench] of Object.entries(DATA.benchmarks || {})) {
+    if (!activeKeys.has(name)) continue;
+    const c = SERIES_CFG[name] || {};
+    perfSeries.push({
+      name: c.label || name, type: "line",
+      data: normalize(bench.series),
+      smooth: false, symbol: "none",
+      lineStyle: { color: c.color, width: c.width || 1.5, type: "dashed" },
+      itemStyle: { color: c.color },
+      xAxisIndex: 0, yAxisIndex: 0, z: 5,
+    });
+  }
 
-  allocChart.setOption({
+  // ── Build a consistent ticker→color map across both strategies ────
+  // Same ETF always gets the same color regardless of which strip it's in.
+  const tickerColorMap = {};
+  let colorIdx = 0;
+  for (const sk of ["top1_top1", "top2_top2"]) {
+    const alloc = DATA?.strategies?.[sk]?.allocation;
+    if (!alloc?.tickers) continue;
+    alloc.tickers.forEach((t, i) => {
+      if (!(t in tickerColorMap) && alloc.weights.some(row => row[i] > 0))
+        tickerColorMap[t] = ALLOC_PALETTE[colorIdx++ % ALLOC_PALETTE.length];
+    });
+  }
+
+  // ── Helper: build stacked-area series for one allocation strip ────
+  function buildAllocSeries(stratKey, xIdx, yIdx) {
+    const alloc = DATA?.strategies?.[stratKey]?.allocation;
+    if (!alloc?.tickers?.length) return [];
+    return alloc.tickers
+      .map((t, i) => ({ t, i }))
+      .filter(({ i }) => alloc.weights.some(row => row[i] > 0))
+      .map(({ t, i }) => {
+        const pts = alloc.dates
+          .map((d, ri) => [d, alloc.weights[ri][i]])
+          .filter(([d]) => d >= startDate);
+        return {
+          name: tickerLabel(t), type: "line",
+          stack: `alloc-${stratKey}`,
+          areaStyle: { color: tickerColorMap[t] || "#4a5170", opacity: 0.88 },
+          lineStyle: { width: 0 },
+          symbol: "none",
+          step: "end",
+          data: pts.map(([d, w]) => [d, +(w * 100).toFixed(2)]),
+          xAxisIndex: xIdx, yAxisIndex: yIdx,
+        };
+      });
+  }
+
+  const allocD1 = buildAllocSeries("top1_top1", 1, 1);
+  const allocD2 = buildAllocSeries("top2_top2", 2, 2);
+
+  // ── Tooltip formatter ─────────────────────────────────────────────
+  function tooltipFormatter(params) {
+    if (!params?.length) return "";
+    const dateStr = new Date(params[0].axisValue).toISOString().slice(0, 10);
+
+    const perfParams = params.filter(p => p.axisIndex === 0);
+    const perfRows = perfParams.map(p =>
+      `<div style="display:flex;justify-content:space-between;gap:24px;margin-bottom:2px">
+        <span style="color:${p.color}">${p.seriesName}</span>
+        <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
+      </div>`
+    ).join("");
+
+    const allocSection = ["top1_top1", "top2_top2"].map(k => {
+      const holdings = allocAtDate(k, dateStr);
+      if (!holdings) return "";
+      const c = SERIES_CFG[k] || {};
+      const chips = Object.entries(holdings).map(([t, w]) => {
+        const color = tickerColorMap[t] || "#4a5170";
+        return `<span style="background:${color}22;border:1px solid ${color}55;border-radius:3px;padding:1px 5px;margin:1px 2px 1px 0;display:inline-block;color:${color}">
+          ${tickerLabel(t)}<span style="opacity:.65;margin-left:3px">${Math.round(w * 100)}%</span>
+        </span>`;
+      }).join("");
+      return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #252a3d">
+        <span style="color:${c.color || "#4a5170"};font-size:10px;font-weight:600">${c.label || k}</span>
+        <div style="margin-top:3px;line-height:2">${chips}</div>
+      </div>`;
+    }).join("");
+
+    return `<div style="font-size:11px;max-width:300px">
+      <div style="color:#4a5170;margin-bottom:6px">${dateStr}</div>
+      ${perfRows}${allocSection}
+    </div>`;
+  }
+
+  // ── ECharts option — 3 grids, all x-axes share startDate min ─────
+  mainChart.setOption({
     backgroundColor: "transparent",
-    animation:       false,
-    grid:    { top: 10, right: 10, bottom: 40, left: 40 },
-    xAxis:   {
-      type:      "time",
-      axisLabel: { color: "#4a5170", fontSize: 10 },
-      axisLine:  { lineStyle: { color: "#252a3d" } },
-      splitLine: { show: false },
-    },
-    yAxis:   {
-      type:     "value",
-      max:      100,
-      axisLabel:{ color: "#4a5170", fontSize: 10, formatter: v => v + "%" },
-      axisLine: { show: false },
-      splitLine:{ lineStyle: { color: "#252a3d", type: "dashed" } },
-    },
+    animation: false,
+
+    grid: [
+      { top: 16,    left: 60, right: 20, bottom: "43%" },  // perf
+      { top: "59%", left: 60, right: 20, height: "15%" },  // D1 strip
+      { top: "77%", left: 60, right: 20, bottom: 26 },     // D2 strip
+    ],
+
+    xAxis: [
+      { type: "time", gridIndex: 0, min: startDate,
+        axisLabel: { show: false },
+        axisLine:  { lineStyle: { color: "#252a3d" } },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "time", gridIndex: 1, min: startDate,
+        axisLabel: { show: false },
+        axisLine:  { lineStyle: { color: "#252a3d" } },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "time", gridIndex: 2, min: startDate,
+        axisLabel: { color: "#4a5170", fontSize: 10 },
+        axisLine:  { lineStyle: { color: "#252a3d" } },
+        splitLine: { show: false },
+        axisTick:  { lineStyle: { color: "#252a3d" } } },
+    ],
+
+    yAxis: [
+      { type: "value", gridIndex: 0,
+        axisLabel: { color: "#4a5170", fontSize: 10, formatter: v => v.toFixed(0) },
+        axisLine:  { show: false },
+        splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
+        axisTick:  { show: false } },
+      { type: "value", gridIndex: 1, max: 100, min: 0,
+        name: "D1", nameLocation: "end",
+        nameTextStyle: { color: "#5b6ef5", fontSize: 10, fontWeight: 600, padding: [0, 0, 4, 0] },
+        axisLabel: { show: false },
+        axisLine:  { show: false },
+        splitLine: { show: false }, axisTick: { show: false } },
+      { type: "value", gridIndex: 2, max: 100, min: 0,
+        name: "D2", nameLocation: "end",
+        nameTextStyle: { color: "#a78bfa", fontSize: 10, fontWeight: 600, padding: [0, 0, 4, 0] },
+        axisLabel: { show: false },
+        axisLine:  { show: false },
+        splitLine: { show: false }, axisTick: { show: false } },
+    ],
+
     tooltip: {
-      trigger:     "axis",
+      trigger: "axis",
       backgroundColor: "#1a1e2e",
-      borderColor: "#252a3d",
-      textStyle:   { color: "#c9d1e0", fontSize: 11 },
+      borderColor:     "#252a3d",
+      textStyle:       { color: "#c9d1e0", fontSize: 12 },
+      axisPointer: {
+        type: "cross",
+        crossStyle: { color: "#4a517066" },
+        link: [{ xAxisIndex: "all" }],
+      },
+      formatter: tooltipFormatter,
     },
+
     legend: { show: false },
-    series,
+
+    series: [...perfSeries, ...allocD1, ...allocD2],
   }, true);
 }
 
@@ -337,23 +314,19 @@ function renderSignalCards() {
 function renderSignalCard(elId, strat, title) {
   const el = document.getElementById(elId);
   if (!strat?.current_signal) { el.innerHTML = ""; return; }
-
   const { date, holdings } = strat.current_signal;
-
   const rows = (holdings || []).map(h => {
-    const pct  = Math.round(h.weight * 100);
-    const isna = !h.nordnet_name;
+    const pct = Math.round(h.weight * 100);
     return `
       <div class="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
         <div class="min-w-0">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="text-xs font-medium text-slate-300">${h.label}</span>
             <span class="text-xs text-muted">${h.ticker}</span>
-            <span class="text-xs px-1.5 py-0 rounded-sm ${
+            <span class="text-xs px-1.5 rounded-sm ${
               h.sleeve === 'factor' ? 'bg-indigo-900/50 text-indigo-300' :
               h.sleeve === 'sector' ? 'bg-purple-900/50 text-purple-300' :
-              'bg-slate-800 text-slate-400'
-            }">${h.sleeve}</span>
+              'bg-slate-800 text-slate-400'}">${h.sleeve}</span>
           </div>
           ${h.nordnet_name ? `<p class="text-xs text-muted mt-0.5 truncate">${h.nordnet_name}</p>` : ""}
         </div>
@@ -367,13 +340,12 @@ function renderSignalCard(elId, strat, title) {
         </div>
       </div>`;
   }).join("");
-
   el.innerHTML = `
     <div class="flex items-center justify-between mb-3">
       <p class="text-xs font-medium text-muted uppercase tracking-widest">${title}</p>
       <span class="text-xs text-muted">${date}</span>
     </div>
-    ${rows || '<p class="text-xs text-muted italic">Cash (regime off)</p>'}`;
+    ${rows || '<p class="text-xs text-muted italic">Cash — regime filter off</p>'}`;
 }
 
 function copyISIN(isin, btn) {
@@ -383,6 +355,152 @@ function copyISIN(isin, btn) {
     btn.style.color = "#10b981";
     setTimeout(() => { btn.textContent = orig; btn.style.color = ""; }, 1500);
   });
+}
+
+// ── Stats panel ────────────────────────────────────────────────────
+function renderStats() {
+  const el = document.getElementById("stats-panel");
+  if (!el) return;
+  const strategies = DATA?.strategies || {};
+
+  // ── Summary metrics ──────────────────────────────────────────────
+  const STRATS = [
+    { key: "top1_top1", label: "D1", color: "#5b6ef5" },
+    { key: "top2_top2", label: "D2", color: "#a78bfa" },
+  ];
+
+  function pct(v, decimals = 1) {
+    return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(decimals) + "%";
+  }
+  function colorClass(v) {
+    if (v == null) return "color:#4a5170";
+    return v >= 0 ? "color:#10b981" : "color:#f43f5e";
+  }
+
+  const summaryCards = STRATS.map(({ key, label, color }) => {
+    const st = strategies[key]?.stats;
+    if (!st) return "";
+    return `
+      <div class="bg-panel border border-border rounded-lg p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest text-slate-400 uppercase">${label}</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div>
+            <p class="text-xs text-muted mb-0.5">CAGR</p>
+            <p class="text-lg font-semibold" style="${colorClass(st.cagr)}">${pct(st.cagr)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-0.5">Sharpe</p>
+            <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-0.5">Max DD <span class="text-muted font-normal">(daglig)</span></p>
+            <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.max_dd)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-0.5">Max DD <span class="text-muted font-normal">(månadsslut)</span></p>
+            <p class="text-lg font-semibold" style="color:#fb923c">${pct(st.max_dd_monthly)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-0.5">Volatilitet</p>
+            <p class="text-lg font-semibold text-slate-300">${pct(st.ann_vol)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-0.5">Total</p>
+            <p class="text-lg font-semibold" style="${colorClass(st.total)}">${pct(st.total)}</p>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  // ── Annual table (two side-by-side tables, one per strategy) ─────
+  const allYears = [...new Set(
+    STRATS.flatMap(({ key }) => Object.keys(strategies[key]?.stats?.annual || {}))
+  )].sort();
+
+  function annualTable({ key, label, color }) {
+    const annual = strategies[key]?.stats?.annual || {};
+    const header = `<thead><tr>
+      <th class="text-left pb-2 pr-3 text-xs font-semibold" style="color:${color}">${label}</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Avkastning</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Sharpe</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Max DD</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">DD månadsslut</th>
+      <th class="text-right pb-2 pl-2 text-xs text-muted font-normal">Vol</th>
+    </tr></thead>`;
+    const rows = allYears.map(yr => {
+      const a = annual[yr];
+      const ret   = a?.ret;
+      const sh    = a?.sharpe;
+      const dd    = a?.max_dd;
+      const ddmo  = a?.max_dd_mo;
+      const vol   = a?.vol;
+      return `<tr class="border-t border-border">
+        <td class="py-1.5 pr-3 text-xs text-slate-400">${yr}</td>
+        <td class="text-right py-1.5 px-2 text-xs font-medium tabular-nums" style="${colorClass(ret)}">${pct(ret)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums text-slate-300">${sh != null ? sh.toFixed(2) : "—"}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#f43f5e">${pct(dd)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#fb923c">${pct(ddmo)}</td>
+        <td class="text-right py-1.5 pl-2 text-xs tabular-nums text-slate-400">${pct(vol)}</td>
+      </tr>`;
+    }).join("");
+    return `<table class="w-full border-collapse">${header}<tbody>${rows}</tbody></table>`;
+  }
+
+  const annualSection = `
+    <div class="bg-panel border border-border rounded-lg p-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per Year — full-period summary in the cards above</p>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        ${STRATS.map(annualTable).join("")}
+      </div>
+    </div>`;
+
+  // ── Monthly heatmap ──────────────────────────────────────────────
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  function heatCell(v) {
+    if (v == null) return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 text-muted">—</span></td>`;
+    const abs = Math.abs(v);
+    const alpha = Math.min(abs / 0.08, 1);  // saturates at 8%
+    const bg = v >= 0
+      ? `rgba(16,185,129,${(alpha * 0.7).toFixed(2)})`
+      : `rgba(244,63,94,${(alpha * 0.7).toFixed(2)})`;
+    const txt = v >= 0 ? "#6ee7b7" : "#fca5a5";
+    return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 tabular-nums" style="background:${bg};color:${txt}">${pct(v, 0)}</span></td>`;
+  }
+
+  const heatmaps = STRATS.map(({ key, label, color }) => {
+    const monthly = strategies[key]?.stats?.monthly;
+    if (!monthly) return "";
+    const years = Object.keys(monthly).sort();
+    const header = `<tr>
+      <th class="text-left pb-1 pr-2 text-xs text-muted font-normal w-12"></th>
+      ${MONTHS.map(m => `<th class="text-center pb-1 px-0.5 text-xs text-muted font-normal">${m}</th>`).join("")}
+    </tr>`;
+    const rows = years.map(yr => {
+      const cells = Array.from({length: 12}, (_, i) => heatCell(monthly[yr]?.[String(i + 1)]));
+      return `<tr><td class="pr-2 text-xs text-slate-400 py-0.5">${yr}</td>${cells.join("")}</tr>`;
+    }).join("");
+    return `
+      <div>
+        <p class="text-xs font-semibold mb-2" style="color:${color}">${label} — monthly returns</p>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-max border-collapse text-xs">
+            <thead>${header}</thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="space-y-5">
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaryCards}</div>
+      ${annualSection}
+      <div class="bg-panel border border-border rounded-lg p-4 space-y-6">${heatmaps}</div>
+    </div>`;
 }
 
 // ── Settings ───────────────────────────────────────────────────────
@@ -405,7 +523,7 @@ function renderSettingsForm() {
     const sleeve = CONFIG[sleeveKey] || {};
     const rows = Object.entries(sleeve).map(([label, info]) => `
       <tr class="border-b border-border">
-        <td class="py-2 pr-4 text-xs font-medium text-slate-400 w-28">${label}</td>
+        <td class="py-2 pr-4 text-xs font-medium text-slate-400 w-28 pl-4">${label}</td>
         <td class="py-2 pr-3">
           <input class="w-full bg-surface border border-border rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-accent"
                  data-sleeve="${sleeveKey}" data-label="${label}" data-field="ticker"
@@ -416,42 +534,37 @@ function renderSettingsForm() {
                  data-sleeve="${sleeveKey}" data-label="${label}" data-field="nordnet_name"
                  value="${info.nordnet_name || ""}" placeholder="Fund name"/>
         </td>
-        <td class="py-2">
+        <td class="py-2 pr-4">
           <input class="w-40 bg-surface border border-border rounded px-2 py-1 text-xs font-mono text-slate-300 focus:outline-none focus:border-accent"
                  data-sleeve="${sleeveKey}" data-label="${label}" data-field="isin"
                  value="${info.isin || ""}" placeholder="SE0012345678"/>
         </td>
       </tr>`).join("");
-
     return `
       <div>
         <p class="text-xs font-semibold text-muted uppercase tracking-widest mb-2">${title}</p>
         <div class="bg-panel border border-border rounded-lg overflow-hidden">
-          <table class="w-full px-4">
+          <table class="w-full">
             <thead>
               <tr class="border-b border-border">
-                <th class="text-left text-xs text-muted py-2 px-4 w-28">Slot</th>
+                <th class="text-left text-xs text-muted py-2 pl-4 w-28">Slot</th>
                 <th class="text-left text-xs text-muted py-2 pr-3">Ticker</th>
                 <th class="text-left text-xs text-muted py-2 pr-3">Nordnet Proxy Name</th>
-                <th class="text-left text-xs text-muted py-2">ISIN</th>
+                <th class="text-left text-xs text-muted py-2 pr-4">ISIN</th>
               </tr>
             </thead>
-            <tbody class="px-4">${rows}</tbody>
+            <tbody>${rows}</tbody>
           </table>
         </div>
       </div>`;
   }
 
-  form.innerHTML =
-    sleeveTable("factor_sleeve", "Factor Sleeve") +
-    sleeveTable("sector_sleeve", "Sector Sleeve");
+  form.innerHTML = sleeveTable("factor_sleeve", "Factor Sleeve") + sleeveTable("sector_sleeve", "Sector Sleeve");
 
-  // Wire up live edits
   form.querySelectorAll("input[data-sleeve]").forEach(inp => {
     inp.addEventListener("input", () => {
       const { sleeve, label, field } = inp.dataset;
-      if (!CONFIG[sleeve]?.[label]) return;
-      CONFIG[sleeve][label][field] = inp.value;
+      if (CONFIG[sleeve]?.[label]) CONFIG[sleeve][label][field] = inp.value;
     });
   });
 }
@@ -469,28 +582,21 @@ async function saveConfig() {
   status.textContent = "";
 
   try {
-    // Snapshot current generated_at to detect when recalc finishes
     const prevTs = DATA?.generated_at || "";
-
     const res = await fetch("/api/config", {
-      method:  "POST",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(CONFIG),
+      body: JSON.stringify(CONFIG),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || res.status);
     }
-
     status.textContent = "Saved. Waiting for engine…";
     label.textContent  = "Recalculating…";
-
-    // Poll until data.json regenerated (max 120s)
     await pollForNewData(prevTs, 120_000);
-
     status.textContent = "Done — reloading…";
     setTimeout(() => location.reload(), 800);
-
   } catch (e) {
     status.textContent = "Error: " + e.message;
     status.style.color = "#f43f5e";
@@ -509,11 +615,9 @@ async function pollForNewData(prevTs, maxWait) {
       const res  = await fetch("/static/data.json?t=" + Date.now());
       const json = await res.json();
       if (json.generated_at && json.generated_at !== prevTs) return json;
-    } catch (_) { /* keep polling */ }
+    } catch (_) {}
   }
   throw new Error("Timed out waiting for recalculation");
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

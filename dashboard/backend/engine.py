@@ -61,8 +61,9 @@ def parse_config(cfg: dict) -> tuple:
                 for label, info in cfg["factor_sleeve"].items()]
     sector_t = [(label, info["ticker"])
                 for label, info in cfg["sector_sleeve"].items()]
-    regime_t = cfg["regime_baseline"]["ticker"]
-    cash_t   = cfg["cash_proxy"]["ticker"]
+    regime_t        = cfg["regime_baseline"]["ticker"]
+    regime_compare_t = cfg.get("regime_cash_compare", {}).get("ticker", cfg["cash_proxy"]["ticker"])
+    cash_t          = cfg["cash_proxy"]["ticker"]   # may be synthetic "CASH"
 
     # Build TER map (from config, fallback to DEFAULT_TER)
     ter_map = dict(DEFAULT_TER)
@@ -70,10 +71,8 @@ def parse_config(cfg: dict) -> tuple:
         for info in cfg[sleeve].values():
             t = info["ticker"]
             ter_map[t] = info.get("ter_pct", DEFAULT_TER.get(t, 0.25))
-    cash_info = cfg["cash_proxy"]
-    ter_map[cash_info["ticker"]] = cash_info.get("ter_pct", 0.10)
 
-    return factor_t, sector_t, regime_t, cash_t, ter_map
+    return factor_t, sector_t, regime_t, regime_compare_t, cash_t, ter_map
 
 
 # ── Price data ─────────────────────────────────────────────────────
@@ -120,7 +119,8 @@ def run_backtest(prices: pd.DataFrame,
                  factor_tickers: list,   # [(label, ticker), ...]
                  sector_tickers: list,
                  regime_ticker: str,
-                 cash_ticker: str,
+                 regime_compare_ticker: str,  # used only for regime gate comparison
+                 cash_ticker: str,            # "CASH" = synthetic flat (0% return)
                  n_factor: int = 1,
                  n_sector: int = 1) -> tuple:
     """
@@ -146,13 +146,19 @@ def run_backtest(prices: pd.DataFrame,
     alloc    = []
     pending  = None
 
+    SYNTHETIC_CASH = "CASH"   # flat ticker — price always 1.0, 0% return
+
     def price_at(ticker, d):
+        if ticker == SYNTHETIC_CASH:
+            return 1.0
         if ticker in prices.columns and d in prices.index:
             v = prices.loc[d, ticker]
             return float(v) if not np.isnan(v) else 0.0
         return 0.0
 
     def ret_lb(ticker, d, lb):
+        if ticker == SYNTHETIC_CASH:
+            return 0.0
         pos = pos_map.get(d, -1)
         if pos < lb or ticker not in prices.columns:
             return np.nan
@@ -176,10 +182,12 @@ def run_backtest(prices: pd.DataFrame,
                 if p > 0:
                     new_sh[t] = (value * w) / p
 
+            # No transaction cost when moving to/from flat cash
+            real_t = {t for t in all_t if t != SYNTHETIC_CASH}
             cost = sum(
                 abs(new_sh.get(t, 0.0) * px.get(t, 0.0) -
                     shares.get(t, 0.0) * px.get(t, 0.0)) * COST
-                for t in all_t
+                for t in real_t
             )
             cash_bal = value - sum(new_sh[t] * px[t] for t in new_sh) - cost
             shares   = new_sh
@@ -194,10 +202,10 @@ def run_backtest(prices: pd.DataFrame,
             continue
 
         # ── Regime gate (252d) ───────────────────────────────────
-        r_mkt  = ret_lb(regime_ticker, d, REG_LB)
-        r_cash = ret_lb(cash_ticker,   d, REG_LB)
-        if (not np.isnan(r_mkt) and not np.isnan(r_cash)
-                and r_mkt <= r_cash):
+        r_mkt     = ret_lb(regime_ticker,         d, REG_LB)
+        r_compare = ret_lb(regime_compare_ticker, d, REG_LB)
+        if (not np.isnan(r_mkt) and not np.isnan(r_compare)
+                and r_mkt <= r_compare):
             pending = {cash_ticker: 1.0}
             alloc.append({"date": d.strftime("%Y-%m-%d"),
                           "holdings": {cash_ticker: 1.0}})
@@ -277,6 +285,73 @@ def current_signal(alloc_log: list, cfg: dict) -> dict:
     }
 
 
+def compute_stats(equity_curve: list) -> dict:
+    """CAGR, Sharpe, MaxDD, annual + monthly returns from equity curve."""
+    if len(equity_curve) < 20:
+        return {}
+
+    dates  = pd.to_datetime([e["date"] for e in equity_curve])
+    values = np.array([e["value"] for e in equity_curve], dtype=float)
+
+    rets   = np.diff(values) / values[:-1]
+    n_yrs  = (dates[-1] - dates[0]).days / 365.25
+    cagr   = (values[-1] / values[0]) ** (1 / n_yrs) - 1 if n_yrs > 0 else 0.0
+
+    ann_ret = np.mean(rets) * 252
+    ann_vol = np.std(rets, ddof=1) * np.sqrt(252)
+    sharpe  = ann_ret / ann_vol if ann_vol > 0 else 0.0
+
+    peak   = np.maximum.accumulate(values)
+    max_dd = float(((values - peak) / peak).min())
+
+    df = pd.DataFrame({"value": values}, index=dates)
+
+    # MaxDD using only month-end NAV values (smoother, ignores intramonth spikes)
+    mo_ends = df.resample("ME").last()["value"].values
+    mo_peak = np.maximum.accumulate(mo_ends)
+    max_dd_monthly = float(((mo_ends - mo_peak) / mo_peak).min()) if len(mo_ends) > 1 else max_dd
+
+    # Annual stats: return, Sharpe, MaxDD, volatility — per calendar year
+    annual = {}
+    for yr, grp in df.groupby(df.index.year):
+        yr_vals = grp["value"].values
+        yr_rets = np.diff(yr_vals) / yr_vals[:-1]
+        yr_ret  = float(yr_vals[-1] / yr_vals[0] - 1)
+        yr_vol  = float(np.std(yr_rets, ddof=1) * np.sqrt(252)) if len(yr_rets) > 1 else 0.0
+        yr_sh   = float(np.mean(yr_rets) * 252 / yr_vol) if yr_vol > 0 else 0.0
+        yr_peak = np.maximum.accumulate(yr_vals)
+        yr_dd   = float(((yr_vals - yr_peak) / yr_peak).min())
+        # Also DD on month-end prices within the year
+        yr_mo = df.loc[df.index.year == yr].resample("ME").last()["value"].values
+        yr_mo_peak = np.maximum.accumulate(yr_mo)
+        yr_dd_mo = float(((yr_mo - yr_mo_peak) / yr_mo_peak).min()) if len(yr_mo) > 1 else yr_dd
+        annual[str(yr)] = {
+            "ret":    round(yr_ret,   4),
+            "sharpe": round(yr_sh,    2),
+            "max_dd": round(yr_dd,    4),
+            "max_dd_mo": round(yr_dd_mo, 4),
+            "vol":    round(yr_vol,   4),
+        }
+
+    # Monthly returns: compare first vs last nav within each calendar month
+    monthly: dict[str, dict[str, float]] = {}
+    for (yr, mo), grp in df.groupby([df.index.year, df.index.month]):
+        monthly.setdefault(str(yr), {})[str(mo)] = round(
+            float(grp["value"].iloc[-1] / grp["value"].iloc[0] - 1), 4
+        )
+
+    return {
+        "cagr":           round(float(cagr),           4),
+        "sharpe":         round(float(sharpe),         4),
+        "max_dd":         round(float(max_dd),         4),
+        "max_dd_monthly": round(float(max_dd_monthly), 4),
+        "ann_vol":        round(float(ann_vol),        4),
+        "total":          round(float(values[-1] / values[0] - 1), 4),
+        "annual":         annual,
+        "monthly":        monthly,
+    }
+
+
 def prices_to_series(prices: pd.DataFrame, ticker: str) -> list:
     if ticker not in prices.columns:
         return []
@@ -290,10 +365,11 @@ def run(cfg: dict = None, use_cache: bool = False):
     if cfg is None:
         cfg = load_config()
 
-    factor_t, sector_t, regime_t, cash_t, ter_map = parse_config(cfg)
+    factor_t, sector_t, regime_t, regime_compare_t, cash_t, ter_map = parse_config(cfg)
 
     strategy_tickers = ([t for _, t in factor_t] + [t for _, t in sector_t]
-                        + [regime_t, cash_t])
+                        + [regime_t, regime_compare_t]
+                        + ([cash_t] if cash_t != "CASH" else []))
     bench_tickers    = list(set(BENCHMARKS.values()))
     all_dl_tickers   = list(dict.fromkeys(strategy_tickers + bench_tickers))
 
@@ -305,10 +381,10 @@ def run(cfg: dict = None, use_cache: bool = False):
     prices_adj[strategy_cols] = apply_ter(prices_raw[strategy_cols], ter_map)
 
     log.info("Running top1/top1 backtest...")
-    eq1, al1 = run_backtest(prices_adj, factor_t, sector_t, regime_t, cash_t, 1, 1)
+    eq1, al1 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 1, 1)
 
     log.info("Running top2/top2 backtest...")
-    eq2, al2 = run_backtest(prices_adj, factor_t, sector_t, regime_t, cash_t, 2, 2)
+    eq2, al2 = run_backtest(prices_adj, factor_t, sector_t, regime_t, regime_compare_t, cash_t, 2, 2)
 
     # Benchmark raw close series (no TER)
     benchmarks_out = {}
@@ -325,12 +401,14 @@ def run(cfg: dict = None, use_cache: bool = False):
             "top1_top1": {
                 "label":          "D1 — top1/top1",
                 "nav":            eq1,
+                "stats":          compute_stats(eq1),
                 "allocation":     alloc_to_matrix(al1),
                 "current_signal": current_signal(al1, cfg),
             },
             "top2_top2": {
                 "label":          "D2 — top2/top2",
                 "nav":            eq2,
+                "stats":          compute_stats(eq2),
                 "allocation":     alloc_to_matrix(al2),
                 "current_signal": current_signal(al2, cfg),
             },
