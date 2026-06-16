@@ -27,8 +27,8 @@ CACHE_PATH  = BASE_DIR / "_price_cache.pkl"
 DATA_PATH   = BASE_DIR.parent / "frontend" / "static" / "data.json"
 
 # ── Strategy parameters ────────────────────────────────────────────
-SEL_LB   = 126       # 6-month selection lookback (trading days)
-REG_LB   = 252       # 12-month regime lookback
+SEL_LB   = 84        # 4-month selection lookback (trading days)
+REG_LB   = 84        # 4-month regime lookback
 COST     = 0.0015    # transaction cost per side
 CAPITAL  = 100_000   # starting capital
 START    = "2019-10-01"
