@@ -1,0 +1,28 @@
+ticker,name,block,role
+^OMX,OMX Stockholm 30 Index (Nordic proxy - no UCITS ETF found on yfinance with usable history),region,risk
+IMEU.L,iShares Core MSCI Europe UCITS ETF,region,risk
+CSPX.L,iShares Core S&P 500 UCITS ETF (Acc),region,risk
+CPXJ.L,iShares Core MSCI Pacific ex-Japan UCITS ETF,region,risk
+IITU.L,iShares S&P 500 Information Technology Sector UCITS ETF (Acc),sector,risk
+IUHC.L,iShares S&P 500 Health Care Sector UCITS ETF (Acc),sector,risk
+IUFS.L,iShares S&P 500 Financials Sector UCITS ETF (Acc),sector,risk
+IUES.L,iShares S&P 500 Energy Sector UCITS ETF (Acc),sector,risk
+IUIS.L,iShares S&P 500 Industrials Sector UCITS ETF (Acc),sector,risk
+IUCS.L,iShares S&P 500 Consumer Staples Sector UCITS ETF (Acc),sector,risk
+IUCD.L,iShares S&P 500 Consumer Discretionary Sector UCITS ETF (Acc),sector,risk
+IUUS.L,iShares S&P 500 Utilities Sector UCITS ETF (Acc),sector,risk
+IUMS.L,iShares S&P 500 Materials Sector UCITS ETF (Acc),sector,risk
+IUCM.L,iShares S&P 500 Communication Sector UCITS ETF (Acc),sector,risk
+IWVL.L,iShares Edge MSCI World Value Factor UCITS ETF,factor,risk
+IWQU.L,iShares Edge MSCI World Quality Factor UCITS ETF,factor,risk
+IWMO.L,iShares Edge MSCI World Momentum Factor UCITS ETF,factor,risk
+EQQQ.L,Invesco EQQQ NASDAQ-100 UCITS ETF (Growth factor substitute),factor,risk
+MVOL.L,iShares Edge MSCI World Minimum Volatility UCITS ETF (Acc),factor,risk
+WSML.L,iShares MSCI World Small Cap UCITS ETF (Size factor proxy),factor,risk
+CEMA.L,iShares MSCI EM Asia UCITS ETF (Acc),em,risk
+LTAM.L,iShares MSCI EM Latin America UCITS ETF (Dist),em,risk
+PHAU.L,WisdomTree Physical Gold,metal,risk
+PHAG.L,WisdomTree Physical Silver,metal,risk
+SEGA.L,iShares Core EUR Govt Bond UCITS ETF (Dist),defensive,defensive
+IBTS.L,iShares USD Treasury Bond 1-3yr UCITS ETF (Dist) - cash proxy substitute,cash,cash
+IWDA.L,iShares Core MSCI World UCITS ETF (Acc),baseline,baseline_bh

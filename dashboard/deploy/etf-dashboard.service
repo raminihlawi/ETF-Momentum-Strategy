@@ -1,0 +1,17 @@
+[Unit]
+Description=ETF Rotation Dashboard (uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/etf-dashboard/backend
+ExecStart=/opt/etf-dashboard/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8765 --workers 1
+Restart=on-failure
+RestartSec=5
+
+# Optional: set auth token for the settings API
+# Environment=DASHBOARD_SECRET=change-me-to-a-strong-secret
+
+[Install]
+WantedBy=multi-user.target

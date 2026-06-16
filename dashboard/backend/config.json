@@ -1,0 +1,22 @@
+{
+  "factor_sleeve": {
+    "VALUE":    { "ticker": "IWVL.L", "nordnet_name": "Storebrand Global Multifaktor A SEK",       "isin": "NO0010714400", "ter_pct": 0.25 },
+    "QUALITY":  { "ticker": "IWQU.L", "nordnet_name": "Swedbank Robur Globalfond A",                "isin": "SE0000542714", "ter_pct": 0.25 },
+    "MOMENTUM": { "ticker": "IWMO.L", "nordnet_name": "Handelsbanken Global Momentum A",            "isin": "SE0015243167", "ter_pct": 0.25 },
+    "SMALLCAP": { "ticker": "WSML.L", "nordnet_name": "Handelsbanken Gl Småbolag Ind Crit A",      "isin": "SE0011308196", "ter_pct": 0.35 }
+  },
+  "sector_sleeve": {
+    "IT":           { "ticker": "IITU.L", "nordnet_name": "Länsförsäkringar Digitalisering A",     "isin": "SE0012455328", "ter_pct": 0.25 },
+    "ENERGY":       { "ticker": "IUES.L", "nordnet_name": "Plus Energi Marknad SEK",               "isin": "SE0015193156", "ter_pct": 0.25 },
+    "HEALTHCARE":   { "ticker": "IUHC.L", "nordnet_name": "Swedbank Robur Healthcare A",           "isin": "SE0000539124", "ter_pct": 0.25 },
+    "FINANCIALS":   { "ticker": "IUFS.L", "nordnet_name": "iShares S&P 500 Financials UCITS ETF", "isin": "IE00B4JNQZ49", "ter_pct": 0.25 },
+    "INDUSTRIALS":  { "ticker": "IUIS.L", "nordnet_name": "Handelsbanken Global Tema A",           "isin": "SE0015243159", "ter_pct": 0.25 },
+    "CONS_DISC":    { "ticker": "IUCD.L", "nordnet_name": "Swedbank Robur Konsumentfond A",        "isin": "SE0000563075", "ter_pct": 0.25 },
+    "CONS_STAP":    { "ticker": "IUCS.L", "nordnet_name": "Länsförsäkringar Konsument A",          "isin": "SE0009779701", "ter_pct": 0.25 },
+    "MATERIALS":    { "ticker": "IUMS.L", "nordnet_name": "Handelsbanken Råvarufond A",            "isin": "SE0001060750", "ter_pct": 0.25 },
+    "UTILITIES":    { "ticker": "IUUS.L", "nordnet_name": "Swedbank Robur Ny Teknik A",            "isin": "SE0000537967", "ter_pct": 0.25 },
+    "COMM":         { "ticker": "IUCM.L", "nordnet_name": "Länsförsäkringar Global A",             "isin": "SE0009779677", "ter_pct": 0.25 }
+  },
+  "regime_baseline": { "ticker": "IWDA.L" },
+  "cash_proxy":      { "ticker": "IBTS.L", "nordnet_name": "Kontanter / Sparkonto", "isin": "CASH", "ter_pct": 0.10 }
+}

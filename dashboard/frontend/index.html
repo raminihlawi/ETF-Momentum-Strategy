@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ETF Rotation Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            surface: '#13161f',
+            panel:   '#1a1e2e',
+            border:  '#252a3d',
+            muted:   '#4a5170',
+            accent:  '#5b6ef5',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background: #0c0e14; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #13161f; }
+    ::-webkit-scrollbar-thumb { background: #252a3d; border-radius: 2px; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+    .spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .tab-active { border-bottom: 2px solid #5b6ef5; color: #e2e8f0; }
+    .tab-inactive { border-bottom: 2px solid transparent; color: #4a5170; }
+    .toggle-on  { background: #5b6ef5; }
+    .toggle-off { background: #252a3d; }
+  </style>
+</head>
+<body class="text-slate-300 font-sans min-h-screen">
+
+<!-- ── Header ─────────────────────────────────────────────────── -->
+<header class="border-b border-border px-6 py-4 flex items-center justify-between">
+  <div>
+    <h1 class="text-sm font-semibold tracking-widest text-slate-400 uppercase">ETF Rotation</h1>
+    <p class="text-xs text-muted mt-0.5" id="last-updated">Loading…</p>
+  </div>
+  <nav class="flex gap-6 text-sm">
+    <button id="tab-dashboard" class="tab-active pb-1 transition-colors" onclick="switchTab('dashboard')">Dashboard</button>
+    <button id="tab-settings"  class="tab-inactive pb-1 transition-colors" onclick="switchTab('settings')">Settings</button>
+  </nav>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DASHBOARD VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-dashboard" class="px-6 py-5 space-y-5">
+
+  <!-- Controls row -->
+  <div class="flex flex-wrap items-center gap-4">
+    <div class="flex items-center gap-2 text-xs">
+      <span class="text-muted">From</span>
+      <input id="start-date" type="date" value="2019-10-01"
+             class="bg-panel border border-border rounded px-2 py-1 text-slate-300 text-xs focus:outline-none focus:border-accent"/>
+    </div>
+    <div class="flex flex-wrap gap-2 ml-2" id="series-toggles"></div>
+  </div>
+
+  <!-- Performance chart -->
+  <div class="bg-panel border border-border rounded-lg">
+    <div id="perf-chart" class="w-full" style="height:380px;"></div>
+  </div>
+
+  <!-- Bottom row: allocation + current signal -->
+  <div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+
+    <!-- Allocation history (3/5 width on xl) -->
+    <div class="xl:col-span-3 bg-panel border border-border rounded-lg">
+      <div class="px-4 pt-4 pb-1">
+        <p class="text-xs font-medium text-muted uppercase tracking-widest">Allocation History</p>
+        <div class="flex gap-3 mt-2 flex-wrap" id="alloc-selector">
+          <button onclick="setAllocStrategy('top1_top1')" id="alloc-btn-top1"
+                  class="text-xs px-2 py-0.5 rounded border border-accent text-accent">D1</button>
+          <button onclick="setAllocStrategy('top2_top2')" id="alloc-btn-top2"
+                  class="text-xs px-2 py-0.5 rounded border border-border text-muted">D2</button>
+        </div>
+      </div>
+      <div id="alloc-chart" style="height:260px;"></div>
+    </div>
+
+    <!-- Current signal (2/5 width) -->
+    <div class="xl:col-span-2 space-y-4">
+      <div id="signal-d1" class="bg-panel border border-border rounded-lg p-4"></div>
+      <div id="signal-d2" class="bg-panel border border-border rounded-lg p-4"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SETTINGS VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-settings" class="hidden px-6 py-5 max-w-4xl space-y-6">
+
+  <p class="text-xs text-muted">
+    Changes take effect after "Save &amp; Recalculate". The engine re-fetches prices and rebuilds all curves.
+    The <span class="text-slate-400">Ticker</span> column accepts any yfinance symbol (e.g. <code class="bg-panel px-1 rounded">QDVE.DE</code>).
+  </p>
+
+  <div id="settings-form" class="space-y-6"></div>
+
+  <div class="flex items-center gap-4 pt-2">
+    <button id="save-btn" onclick="saveConfig()"
+            class="px-5 py-2 bg-accent hover:bg-indigo-500 text-white text-sm font-medium rounded transition-colors flex items-center gap-2">
+      <span id="save-label">Save &amp; Recalculate</span>
+      <svg id="save-spinner" class="hidden spinner w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+      </svg>
+    </button>
+    <p id="save-status" class="text-xs text-muted"></p>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

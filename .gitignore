@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pkl
+*.sqlite3
+*.pdf
+files/
+files.zip
+sweep_results/
+etf_sweep_results/
+marketfighter_sweep_results/
+marketfighter_sweep2_results/
+mg99_vs_fitp_results/
+dashboard/backend/_price_cache.pkl
