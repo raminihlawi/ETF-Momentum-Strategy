@@ -48,6 +48,7 @@
   <nav class="flex gap-6 text-sm">
     <button id="tab-dashboard" class="tab-active pb-1 transition-colors" onclick="switchTab('dashboard')">Dashboard</button>
     <button id="tab-settings"  class="tab-inactive pb-1 transition-colors" onclick="switchTab('settings')">Settings</button>
+    <button id="tab-funds"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('funds')">Fondmappning</button>
   </nav>
 </header>
 
@@ -113,6 +114,19 @@
     </button>
     <p id="save-status" class="text-xs text-muted"></p>
   </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FUNDS VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-funds" class="hidden px-6 py-5 max-w-6xl space-y-6">
+  <div>
+    <h2 class="text-sm font-semibold text-slate-300">Fondmappning — Nordnet &amp; PPM</h2>
+    <p class="text-xs text-muted mt-1">
+      Alla ETF:er i D1-accel är direkthandelbara på Nordnet (Xetra, EUR). PPM-kolumnen visar närmaste tillgängliga fond på Pensionsmyndighetens fondtorg — faktorfonder saknas helt i PPM-universumet.
+    </p>
+  </div>
+  <div id="funds-table"></div>
 </div>
 
 <!-- ── Strategy Spec Modal ─────────────────────────────────────── -->

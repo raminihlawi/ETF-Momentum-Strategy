@@ -154,8 +154,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 function switchTab(tab) {
   document.getElementById("view-dashboard").classList.toggle("hidden", tab !== "dashboard");
   document.getElementById("view-settings").classList.toggle("hidden",  tab !== "settings");
+  document.getElementById("view-funds").classList.toggle("hidden",     tab !== "funds");
   document.getElementById("tab-dashboard").className = tab === "dashboard" ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
   document.getElementById("tab-settings").className  = tab === "settings"  ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
+  document.getElementById("tab-funds").className     = tab === "funds"     ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
+  if (tab === "funds") renderFundsTable();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -843,6 +846,199 @@ async function saveConfig() {
     label.textContent = "Save & Recalculate";
     spinner.classList.add("hidden");
   }
+}
+
+// ── Fund mapping data ──────────────────────────────────────────────
+const FUND_MAPPINGS = [
+  // ── FACTOR SLEEVE ────────────────────────────────────────────────
+  {
+    sleeve: "Faktor", label: "USA MOM", ticker: "QDVA.DE", isin: "IE00BD1F4N50",
+    name: "iShares Edge MSCI USA Momentum Factor UCITS ETF",
+    nordnet: { name: "QDVA.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: BlackRock US Flexible Equity A2", nr: "804385", quality: "none" },
+  },
+  {
+    sleeve: "Faktor", label: "USA QUAL", ticker: "QDVB.DE", isin: "IE00BD1F4L38",
+    name: "iShares Edge MSCI USA Quality Factor UCITS ETF",
+    nordnet: { name: "QDVB.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: BlackRock US Flexible Equity A2", nr: "804385", quality: "none" },
+  },
+  {
+    sleeve: "Faktor", label: "USA VAL", ticker: "QDVI.DE", isin: "IE00BD1F4M44",
+    name: "iShares Edge MSCI USA Value Factor UCITS ETF",
+    nordnet: { name: "QDVI.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: Länsförsäkringar USA Aktiv A", nr: "456475", quality: "none" },
+  },
+  {
+    sleeve: "Faktor", label: "USA SMALL", ticker: "SXRG.DE", isin: "IE00B3VWM098",
+    name: "iShares MSCI USA Small Cap ESG Enhanced CTB UCITS ETF",
+    nordnet: { name: "SXRG.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match (ESG-variant)", quality: "exact" },
+    ppm: { name: "SEB Nordamerikafond Små och Medelstora Bolag A", sub: "Aktiv förvaltning, US small/mid-cap", nr: "916354", quality: "good" },
+  },
+  {
+    sleeve: "Faktor", label: "EUR MOM", ticker: "CEMR.DE", isin: "IE00BQN1K786",
+    name: "iShares Edge MSCI Europe Momentum Factor UCITS ETF",
+    nordnet: { name: "CEMR.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: Storebrand Europa A", nr: "140673", quality: "none" },
+  },
+  {
+    sleeve: "Faktor", label: "EUR QUAL", ticker: "CEMQ.DE", isin: "IE00BQN1K562",
+    name: "iShares Edge MSCI Europe Quality Factor UCITS ETF",
+    nordnet: { name: "CEMQ.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: Storebrand Europa A", nr: "140673", quality: "none" },
+  },
+  {
+    sleeve: "Faktor", label: "EUR VAL", ticker: "CEMS.DE", isin: "IE00BQN1K901",
+    name: "iShares Edge MSCI Europe Value Factor UCITS ETF",
+    nordnet: { name: "CEMS.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: AMF Aktiefond Europa", nr: "538462", quality: "none" },
+  },
+  {
+    sleeve: "Faktor", label: "EUR SMALL", ticker: "XXSC.DE", isin: "LU0322253906",
+    name: "Xtrackers MSCI Europe Small Cap UCITS ETF 1C",
+    nordnet: { name: "XXSC.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Lannebo Europa Småbolag A", sub: "Aktiv, europeisk small-cap", nr: "182759", quality: "good",
+           alt: "SEB Europafond Småbolag (556589)" },
+  },
+  // ── SECTOR SLEEVE ────────────────────────────────────────────────
+  {
+    sleeve: "Sektor", label: "IT", ticker: "QDVE.DE", isin: "IE00B3WJKG14",
+    name: "iShares S&P 500 Information Technology Sector UCITS ETF",
+    nordnet: { name: "QDVE.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Swedbank Robur Technology A", sub: "US-tung tech, nära S&P 500 IT", nr: "283408", quality: "good",
+           alt: "BlackRock World Technology A2 (446088)" },
+  },
+  {
+    sleeve: "Sektor", label: "ENERGY", ticker: "QDVF.DE", isin: "IE00B42NKQ00",
+    name: "iShares S&P 500 Energy Sector UCITS ETF",
+    nordnet: { name: "QDVF.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "BlackRock – World Energy A2", sub: "Global energi, ej renodlat S&P 500", nr: "517748", quality: "partial" },
+  },
+  {
+    sleeve: "Sektor", label: "HEALTHCARE", ticker: "QDVG.DE", isin: "IE00B43HR379",
+    name: "iShares S&P 500 Health Care Sector UCITS ETF",
+    nordnet: { name: "QDVG.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Handelsbanken Hälsovård Tema A1", sub: "Global hälsovård, bred matchning", nr: "644005", quality: "good",
+           alt: "DNB Health Care S (255001)" },
+  },
+  {
+    sleeve: "Sektor", label: "CONS DISC", ticker: "QDVK.DE", isin: "IE00B4MCHD36",
+    name: "iShares S&P 500 Consumer Discretionary Sector UCITS ETF",
+    nordnet: { name: "QDVK.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: Seligson Global Top 25 Brands", nr: "416982", quality: "none" },
+  },
+  {
+    sleeve: "Sektor", label: "INDUSTRIALS", ticker: "2B7C.DE", isin: "IE00B4LN9N13",
+    name: "iShares S&P 500 Industrials Sector UCITS ETF",
+    nordnet: { name: "2B7C.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Ingen dedikerad industrisektor-fond i PPM", nr: null, quality: "none" },
+  },
+  {
+    sleeve: "Sektor", label: "CONS STAP", ticker: "2B7D.DE", isin: "IE00B40B8R38",
+    name: "iShares S&P 500 Consumer Staples Sector UCITS ETF",
+    nordnet: { name: "2B7D.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "Ingen nära matchning", sub: "Närmast: Seligson Global Top 25 Brands", nr: "416982", quality: "none" },
+  },
+  {
+    sleeve: "Sektor", label: "MATERIALS", ticker: "2B7B.DE", isin: "IE00B4MKCJ84",
+    name: "iShares S&P 500 Materials Sector UCITS ETF",
+    nordnet: { name: "2B7B.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    ppm: { name: "BlackRock – World Mining A2", sub: "Metaller/gruvor, saknar kemikalier", nr: "481911", quality: "partial",
+           alt: "Allianz Global Metals and Mining A (502922)" },
+  },
+];
+
+function renderFundsTable() {
+  const el = document.getElementById("funds-table");
+  if (!el || el.dataset.rendered) return;
+  el.dataset.rendered = "1";
+
+  const qualityBadge = (q) => {
+    if (q === "exact")   return `<span class="px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-900/40 text-emerald-400">Direkt</span>`;
+    if (q === "good")    return `<span class="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-900/40 text-blue-400">Bra matchning</span>`;
+    if (q === "partial") return `<span class="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-900/40 text-amber-400">Partiell</span>`;
+    return `<span class="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-800 text-muted">Ingen matchning</span>`;
+  };
+
+  const sleeveColor = { "Faktor": "#5b6ef5", "Sektor": "#10b981" };
+
+  let html = `
+    <div class="text-xs text-muted mb-3 flex gap-6">
+      <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>Direkt — exakt ETF tillgänglig</span>
+      <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-blue-400"></span>Bra matchning — nära index/tema</span>
+      <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-amber-400"></span>Partiell — delvis överlapp</span>
+      <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-slate-600"></span>Ingen matchning i PPM-universumet</span>
+    </div>`;
+
+  let currentSleeve = null;
+  for (const f of FUND_MAPPINGS) {
+    if (f.sleeve !== currentSleeve) {
+      if (currentSleeve !== null) html += `</div>`;
+      currentSleeve = f.sleeve;
+      const c = sleeveColor[f.sleeve] || "#64748b";
+      html += `
+        <div class="mb-4">
+          <h3 class="text-xs font-semibold tracking-widest uppercase mb-2" style="color:${c}">${f.sleeve}sleeve — Top-1 väljs månadsvis via accelerated momentum</h3>
+          <div class="bg-panel border border-border rounded-lg overflow-hidden">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-border text-muted">
+                  <th class="px-3 py-2 text-left w-20">Exponering</th>
+                  <th class="px-3 py-2 text-left w-24">ETF (Xetra)</th>
+                  <th class="px-3 py-2 text-left">Fondnamn</th>
+                  <th class="px-3 py-2 text-left w-64">Nordnet</th>
+                  <th class="px-3 py-2 text-left w-72">PPM-fond</th>
+                  <th class="px-3 py-2 text-left w-20">PPM-nr</th>
+                </tr>
+              </thead>
+              <tbody>`;
+    }
+
+    const ppmNr = f.ppm.nr
+      ? `<a href="https://www.pensionsmyndigheten.se/service/fondtorg/fond/${f.ppm.nr}"
+             target="_blank" rel="noopener"
+             class="text-accent hover:underline">${f.ppm.nr}</a>`
+      : `<span class="text-muted">—</span>`;
+
+    const ppmAlt = f.ppm.alt
+      ? `<div class="text-muted mt-0.5">Alt: ${f.ppm.alt}</div>`
+      : "";
+
+    html += `
+      <tr class="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
+        <td class="px-3 py-2.5 font-medium" style="color:${sleeveColor[f.sleeve]}">${f.label}</td>
+        <td class="px-3 py-2.5 font-mono text-slate-400">${f.ticker}</td>
+        <td class="px-3 py-2.5 text-slate-400">${f.name}</td>
+        <td class="px-3 py-2.5">
+          <div class="text-slate-300">${f.nordnet.note}</div>
+          <div class="text-muted mt-0.5">${f.ticker} · ${f.isin}</div>
+        </td>
+        <td class="px-3 py-2.5">
+          <div class="flex items-start gap-2">
+            ${qualityBadge(f.ppm.quality)}
+            <div>
+              <div class="text-slate-300">${f.ppm.name}</div>
+              <div class="text-muted mt-0.5">${f.ppm.sub}</div>
+              ${ppmAlt}
+            </div>
+          </div>
+        </td>
+        <td class="px-3 py-2.5">${ppmNr}</td>
+      </tr>`;
+  }
+  html += `</tbody></table></div></div>`;
+
+  html += `
+    <div class="bg-panel border border-border rounded-lg p-4 text-xs text-muted space-y-1">
+      <p class="text-slate-400 font-medium mb-2">Sammanfattning</p>
+      <p>• <span class="text-slate-300">Nordnet:</span> Alla 15 ETF:er är direkthandelbara på Nordnet.se (Xetra, EUR-denominerade). Ingen proxy behövs.</p>
+      <p>• <span class="text-slate-300">PPM — faktorsleeve:</span> Faktorfonder (momentum, quality, value) saknas helt i PPM-universumet. Strategin är ej replikerbar i PPM för faktordelen.</p>
+      <p>• <span class="text-slate-300">PPM — small cap:</span> Rimliga aktiva alternativ finns för USA small cap (916354) och Europa small cap (182759).</p>
+      <p>• <span class="text-slate-300">PPM — sektorsleeve:</span> Tech (283408) och Healthcare (644005) har starka PPM-alternativ. Energy partiellt (517748). Industrials, Consumer Disc. och Consumer Staples saknar PPM-ekvivalent.</p>
+      <p class="pt-1">PPM-nr länkar till Pensionsmyndighetens fondtorg. Kontrollera alltid att fonden är öppen för nyteckning.</p>
+    </div>`;
+
+  el.innerHTML = html;
 }
 
 async function pollForNewData(prevTs, maxWait) {
