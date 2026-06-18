@@ -55,11 +55,18 @@ for f in config.json screening_config.json; do
 done
 chown -R "$APP_USER:$APP_USER" "$DATA_DIR"
 
-# ── 6. DB migration ────────────────────────────────────────────────
-echo "==> Running DB migration (pickle + CSV → SQLite)"
-sudo -u "$APP_USER" DATA_DIR="$DATA_DIR" \
-  "$VENV/bin/python3" "$DEPLOY_DIR/scripts/migrate_to_db.py" \
-  --db "$DATA_DIR/dashboard.db" || echo "  (migration skipped — run manually if needed)"
+# ── 6. DB migration (skip if DB already uploaded) ─────────────────
+if [ -f "$DATA_DIR/dashboard.db" ]; then
+  echo "==> Found existing database — skipping migration"
+  sudo -u "$APP_USER" DATA_DIR="$DATA_DIR" \
+    "$VENV/bin/python3" "$DEPLOY_DIR/scripts/migrate_to_db.py" \
+    --verify --db "$DATA_DIR/dashboard.db"
+else
+  echo "==> No database found — running migration from source files"
+  sudo -u "$APP_USER" DATA_DIR="$DATA_DIR" \
+    "$VENV/bin/python3" "$DEPLOY_DIR/scripts/migrate_to_db.py" \
+    --db "$DATA_DIR/dashboard.db" || echo "  (migration failed — DB will be empty, engine will re-download from yfinance)"
+fi
 
 # ── 7. Initial engine run ──────────────────────────────────────────
 echo "==> Running initial engine calculation (~30 s)"
