@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -52,7 +53,7 @@ def _run_engine_bg():
     _engine_running.set()
     try:
         subprocess.run(
-            ["python3", str(ENGINE)],
+            [sys.executable, str(ENGINE)],
             cwd=str(BASE_DIR),
             env={**os.environ, "DATA_DIR": str(_DATA_DIR)},
             capture_output=False,
