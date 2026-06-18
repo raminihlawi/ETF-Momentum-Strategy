@@ -63,7 +63,7 @@ echo "==> Running setup.sh on VPS"
 ssh -t "$SSH_TARGET" bash << REMOTE
 set -e
 cd "$DEPLOY_DIR"
-bash dashboard/deploy/setup.sh "$DOMAIN"
+sudo bash dashboard/deploy/setup.sh "$DOMAIN"
 REMOTE
 
 echo ""
