@@ -99,8 +99,9 @@ def compute_signals(wide: pd.DataFrame) -> pd.DataFrame:
 def _run_backtest(wide: pd.DataFrame, scores: pd.DataFrame,
                   etf_cash_months: set):
     """
-    Monthly top-N rotation with ETF-cash sync.
-    When D1-accel is in cash, PPM switches to 100% AP7 Räntefond.
+    Monthly top-N rotation with two cash triggers:
+    1. ETF-cash sync: D1-accel in cash → 100% AP7 Räntefond
+    2. PPM momentum filter: best eligible equity score < 0 → 100% AP7 Räntefond
     """
     min_days = ROC_DAYS + 2 * ACCEL_WIN + 10
 
@@ -130,23 +131,33 @@ def _run_backtest(wide: pd.DataFrame, scores: pd.DataFrame,
         else:
             elig = [
                 c for c in wide.columns
-                if wide[c].first_valid_index() is not None
+                if c != CASH_PPM
+                and wide[c].first_valid_index() is not None
                 and (dt - wide[c].first_valid_index()).days >= min_days
                 and not np.isnan(scores.loc[dt, c])
             ]
             if not elig:
                 continue
-            picks = set(scores.loc[dt, elig].nlargest(TOP_N).index)
+            top_scores = scores.loc[dt, elig].nlargest(TOP_N)
+            # PPM momentum filter: all top candidates negative → go to cash
+            if top_scores.iloc[0] < 0:
+                picks = {CASH_PPM}
+            else:
+                picks = set(top_scores.index)
 
         # Compute monthly return from previous holdings
         if prev_dt is not None and weights:
             prev_avail = wide.index[wide.index <= prev_dt]
             p0  = prev_avail[-1]
             w   = 1.0 / len(weights)
-            ret = sum(
-                wide.loc[dt, p] / wide.loc[p0, p] - 1
-                for p in weights if p in wide.columns
-            ) * w
+            ret = 0.0
+            for p in weights:
+                if p not in wide.columns:
+                    continue
+                p0_val = wide.loc[p0, p] if p0 in wide.index else np.nan
+                p1_val = wide.loc[dt, p]
+                if not np.isnan(p0_val) and not np.isnan(p1_val) and p0_val > 0:
+                    ret += w * (p1_val / p0_val - 1)
             monthly_rets.append(ret)
             nav *= (1 + ret)
 
