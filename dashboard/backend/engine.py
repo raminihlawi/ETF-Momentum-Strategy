@@ -606,6 +606,12 @@ def run(cfg: dict = None, use_cache: bool = False):
                 out["strategies"]["ppm_top3"] = ppm_result
             else:
                 log.warning("PPM engine returned None — skipping ppm_top3")
+
+            ppm_recent = _run_ppm(PPM_DATA_FILE, etf_cash_months, db_path=DB_PATH,
+                                  start_date="2020-01-01",
+                                  label="PPM — top3 (2020+)")
+            if ppm_recent is not None:
+                out["strategies"]["ppm_top3_recent"] = ppm_recent
         except Exception as e:
             log.warning(f"PPM engine failed: {e}")
     else:

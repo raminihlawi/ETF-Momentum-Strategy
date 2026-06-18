@@ -115,17 +115,29 @@ const STRATEGY_SPECS = {
   },
   ppm_top3: {
     color: "#06b6d4",
-    tagline: "PPM-rotation — top-3 fonder synkad med D1-accel regimfilter",
-    description: "Roterar bland 14 PPM-fonder (sektorer + regioner + AP7 Räntefond) med EMA(10)-mjukad accel-signal. ETF-cash sync: månader då D1-accel är 100% i cash → PPM håller AP7 Räntefond oavsett momentum. Ingen handelskostnad (PPM är gratis). Optimerat via 1 440-konfigurationssweep med rättad datakvalitet (Q4 2025–Q1 2026).",
+    tagline: "PPM-rotation — top-3 fonder, full historik 2001–2026",
+    description: "Roterar bland 14 PPM-fonder med EMA(10)-mjukad accel-signal. Dubbelt cash-skydd: ETF-cash sync (D1-accel i cash) + PPM momentum-filter (alla top-3 scores negativa → AP7 Räntefond). Full historik inkl. dot-com & finanskrisen.",
     params: [
       { k: "Signal",        v: "EMA(10) × ROC(84d) + acceleration(30d)" },
       { k: "Urval",         v: "Top 3 fonder, likviktade" },
-      { k: "ETF-cash sync", v: "D1-accel i cash → 100% AP7 Räntefond" },
+      { k: "Cash-skydd",    v: "ETF-cash sync + PPM momentum-filter (score < 0)" },
       { k: "Universum",     v: "14 fonder: Tech · Healthcare · Energy · Mining · Consumer Brands · US Value/Small/Quality/Growth · EUR Small/Value · Multifactor · AP7 Aktie · AP7 Räntefond" },
       { k: "Kostnad",       v: "0 kr (PPM = gratis rebalansering)" },
-      { k: "Backtest",      v: "2020-08 → 2026-05  |  CAGR 23.7% · Sharpe 1.92 · MaxDD -7.8%" },
+      { k: "Backtest",      v: "2001 → 2026  |  CAGR 9.9% · Sharpe 0.85" },
     ],
-    source: "Sweep: 1 440 konfigurationer (EMA 3/5/10 × ROC 42/63/84/126d × accel 10/15/30d × top 1/2/3 × abs-mom on/off × ETF-cash on/off) — omkörd med rättad PPM-data jun 2026",
+    source: "Full historik 2001–2026 inkl. dot-com-kraschen och finanskrisen 2008",
+  },
+  ppm_top3_recent: {
+    color: "#22d3ee",
+    tagline: "PPM-rotation — top-3 fonder (2020+)",
+    description: "Samma strategi som PPM top-3 men backtestet startar 2020. Visar den period som ursprungligen optimerades.",
+    params: [
+      { k: "Signal",        v: "EMA(10) × ROC(84d) + acceleration(30d)" },
+      { k: "Urval",         v: "Top 3 fonder, likviktade" },
+      { k: "Cash-skydd",    v: "ETF-cash sync + PPM momentum-filter (score < 0)" },
+      { k: "Backtest",      v: "2020 → 2026  |  CAGR ~19% · Sharpe ~1.5" },
+    ],
+    source: "Ursprunglig backtest-period (2020–2026)",
   },
 };
 
@@ -139,7 +151,8 @@ const SERIES_CFG = {
   d2_accel:     { label: "D2-accel.",        color: "#fcd34d", width: 2.0 },
   d1_lowcorr:   { label: "D1-low-corr.",     color: "#f43f5e", width: 2.0 },
   d2_lowcorr:   { label: "D2-low-corr.",     color: "#fb7185", width: 2.0 },
-  ppm_top3:     { label: "PPM top-3",        color: "#06b6d4", width: 2.5 },
+  ppm_top3:        { label: "PPM top-3 (2001+)", color: "#06b6d4", width: 2.5 },
+  ppm_top3_recent: { label: "PPM top-3 (2020+)", color: "#22d3ee", width: 2.5 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
@@ -154,7 +167,7 @@ const ALLOC_PALETTE = [
 // ── State ──────────────────────────────────────────────────────────
 let DATA = null;
 let CONFIG = null;
-let activeKeys = new Set(["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "ppm_top3", "MSCI World"]);
+let activeKeys = new Set(["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "ppm_top3", "ppm_top3_recent", "MSCI World"]);
 let mainChart = null;
 let tickerColorMap = {};
 let ppmColorMap = {};
@@ -337,7 +350,7 @@ function renderMainChart() {
   function buildAllocSeries(stratKey, xIdx, yIdx) {
     const alloc = DATA?.strategies?.[stratKey]?.allocation;
     if (!alloc?.tickers?.length) return [];
-    const isPPM = stratKey === "ppm_top3";
+    const isPPM = stratKey.startsWith("ppm_top3");
     return alloc.tickers
       .map((t, i) => ({ t, i }))
       .filter(({ i }) => alloc.weights.some(row => row[i] > 0))
@@ -362,7 +375,7 @@ function renderMainChart() {
   // ── Dynamic allocation strips ──────────────────────────────────────
   const STRIP_CANDIDATES = [
     "top1_top1","d1_composite","d1_accel","d1_lowcorr",
-    "top2_top2","d2_composite","d2_accel","d2_lowcorr","ppm_top3",
+    "top2_top2","d2_composite","d2_accel","d2_lowcorr","ppm_top3","ppm_top3_recent",
   ];
   const activeStrips = STRIP_CANDIDATES.filter(
     k => activeKeys.has(k) && DATA?.strategies?.[k]?.allocation?.tickers?.length
@@ -440,12 +453,12 @@ function renderMainChart() {
     ).join("");
 
     const ALLOC_KEYS = ["top1_top1","d1_composite","d1_accel","d1_lowcorr",
-                        "top2_top2","d2_composite","d2_accel","d2_lowcorr","ppm_top3"];
+                        "top2_top2","d2_composite","d2_accel","d2_lowcorr","ppm_top3","ppm_top3_recent"];
     const allocSection = ALLOC_KEYS.filter(k => activeKeys.has(k)).map(k => {
       const holdings = allocAtDate(k, dateStr);
       if (!holdings) return "";
       const c = SERIES_CFG[k] || {};
-      const isPPM = k === "ppm_top3";
+      const isPPM = k.startsWith("ppm_top3");
       const chips = Object.entries(holdings).map(([t, w]) => {
         const color = isPPM ? (c.color || "#06b6d4") : (tickerColorMap[t] || "#8591b8");
         const label = isPPM ? t : tickerLabel(t);

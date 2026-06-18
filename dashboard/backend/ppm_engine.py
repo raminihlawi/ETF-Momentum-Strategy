@@ -353,13 +353,15 @@ def _current_signal(alloc_log: list) -> dict:
 # ── Public entry point ─────────────────────────────────────────────
 def run_ppm(data_file: Path,
             etf_cash_months: set | None = None,
-            db_path: Path | None = None) -> dict | None:
+            db_path: Path | None = None,
+            start_date: str | None = None,
+            label: str | None = None) -> dict | None:
     """
     Run the PPM backtest and return a result dict compatible with
     the ETF strategy format used by engine.py.
 
     etf_cash_months: set of (year, month) where D1-accel was in cash.
-    Pass an empty set or None to disable ETF-cash sync.
+    start_date: ISO date string to clip the backtest start (e.g. "2020-01-01").
     """
     # Prefer SQLite DB; fall back to CSV file
     wide = None
@@ -391,6 +393,12 @@ def run_ppm(data_file: Path,
         log.warning("PPM data loaded but too few funds to run backtest")
         return None
 
+    if start_date:
+        wide = wide[wide.index >= pd.Timestamp(start_date)]
+        if wide.empty:
+            log.warning("PPM data empty after start_date filter")
+            return None
+
     scores = compute_signals(wide)
 
     if etf_cash_months is None:
@@ -420,7 +428,7 @@ def run_ppm(data_file: Path,
     )
 
     return {
-        "label":          "PPM — top3 ETF-cash sync",
+        "label":          label or "PPM — top3 ETF-cash sync",
         "nav":            daily,
         "stats":          stats,
         "allocation":     alloc,
