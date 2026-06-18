@@ -113,6 +113,20 @@ const STRATEGY_SPECS = {
     ],
     source: "D2-variant av D1-low-corr",
   },
+  ppm_top3: {
+    color: "#06b6d4",
+    tagline: "PPM-rotation — top-3 fonder synkad med D1-accel regimfilter",
+    description: "Roterar bland 14 PPM-fonder (sektorer + regioner + AP7 Räntefond) med EMA(10)-mjukad accel-signal. ETF-cash sync: månader då D1-accel är 100% i cash → PPM håller AP7 Räntefond oavsett momentum. Ingen handelskostnad (PPM är gratis). Optimerat via 1 440-konfigurationssweep med rättad datakvalitet (Q4 2025–Q1 2026).",
+    params: [
+      { k: "Signal",        v: "EMA(10) × ROC(84d) + acceleration(30d)" },
+      { k: "Urval",         v: "Top 3 fonder, likviktade" },
+      { k: "ETF-cash sync", v: "D1-accel i cash → 100% AP7 Räntefond" },
+      { k: "Universum",     v: "14 fonder: Tech · Healthcare · Energy · Mining · Consumer Brands · US Value/Small/Quality/Growth · EUR Small/Value · Multifactor · AP7 Aktie · AP7 Räntefond" },
+      { k: "Kostnad",       v: "0 kr (PPM = gratis rebalansering)" },
+      { k: "Backtest",      v: "2020-08 → 2026-05  |  CAGR 23.7% · Sharpe 1.92 · MaxDD -7.8%" },
+    ],
+    source: "Sweep: 1 440 konfigurationer (EMA 3/5/10 × ROC 42/63/84/126d × accel 10/15/30d × top 1/2/3 × abs-mom on/off × ETF-cash on/off) — omkörd med rättad PPM-data jun 2026",
+  },
 };
 
 // ── Palette ────────────────────────────────────────────────────────
@@ -125,6 +139,7 @@ const SERIES_CFG = {
   d2_accel:     { label: "D2-accel.",        color: "#fcd34d", width: 2.0 },
   d1_lowcorr:   { label: "D1-low-corr.",     color: "#f43f5e", width: 2.0 },
   d2_lowcorr:   { label: "D2-low-corr.",     color: "#fb7185", width: 2.0 },
+  ppm_top3:     { label: "PPM top-3",        color: "#06b6d4", width: 2.5 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
@@ -139,8 +154,10 @@ const ALLOC_PALETTE = [
 // ── State ──────────────────────────────────────────────────────────
 let DATA = null;
 let CONFIG = null;
-let activeKeys = new Set(["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "MSCI World"]);
+let activeKeys = new Set(["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "ppm_top3", "MSCI World"]);
 let mainChart = null;
+let tickerColorMap = {};
+let ppmColorMap = {};
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
@@ -152,13 +169,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(tab) {
-  document.getElementById("view-dashboard").classList.toggle("hidden", tab !== "dashboard");
-  document.getElementById("view-settings").classList.toggle("hidden",  tab !== "settings");
-  document.getElementById("view-funds").classList.toggle("hidden",     tab !== "funds");
-  document.getElementById("tab-dashboard").className = tab === "dashboard" ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
-  document.getElementById("tab-settings").className  = tab === "settings"  ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
-  document.getElementById("tab-funds").className     = tab === "funds"     ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
-  if (tab === "funds") renderFundsTable();
+  const views = ["dashboard", "settings", "funds", "screen", "docs"];
+  views.forEach(v => document.getElementById("view-" + v)?.classList.toggle("hidden", tab !== v));
+  views.forEach(v => {
+    const el = document.getElementById("tab-" + v);
+    if (el) el.className = tab === v ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
+  });
+  if (tab === "funds")    renderFundsTable();
+  if (tab === "screen")   renderScreening();
+  if (tab === "docs")     renderDocs();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -179,10 +198,35 @@ function renderAll() {
     ? new Date(DATA.generated_at).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" })
     : "unknown";
   document.getElementById("last-updated").textContent = "Updated " + ts;
+  buildTickerColorMap();
   buildToggles();
   renderMainChart();
   renderSignalCards();
   renderStats();
+}
+
+function buildTickerColorMap() {
+  tickerColorMap = {};
+  ppmColorMap = {};
+  let colorIdx = 0;
+  for (const sk of ["top1_top1","top2_top2","d1_composite","d2_composite",
+                    "d1_accel","d2_accel","d1_lowcorr","d2_lowcorr"]) {
+    const alloc = DATA?.strategies?.[sk]?.allocation;
+    if (!alloc?.tickers) continue;
+    alloc.tickers.forEach((t, i) => {
+      if (!(t in tickerColorMap) && alloc.weights.some(row => row[i] > 0))
+        tickerColorMap[t] = ALLOC_PALETTE[colorIdx++ % ALLOC_PALETTE.length];
+    });
+  }
+  // PPM fund labels get their own color assignments
+  const ppmAlloc = DATA?.strategies?.ppm_top3?.allocation;
+  if (ppmAlloc?.tickers) {
+    let ppmIdx = 0;
+    ppmAlloc.tickers.forEach((t, i) => {
+      if (!(t in ppmColorMap) && ppmAlloc.weights.some(row => row[i] > 0))
+        ppmColorMap[t] = ALLOC_PALETTE[ppmIdx++ % ALLOC_PALETTE.length];
+    });
+  }
 }
 
 // ── Series toggles ─────────────────────────────────────────────────
@@ -210,6 +254,8 @@ function buildToggles() {
       if (activeKeys.has(key)) activeKeys.delete(key); else activeKeys.add(key);
       applyToggleStyle(btn, activeKeys.has(key), color);
       renderMainChart();
+      renderStats();
+      renderSignalCards();
     });
     container.appendChild(btn);
   });
@@ -218,7 +264,7 @@ function buildToggles() {
 function applyToggleStyle(btn, on, color) {
   btn.style.background   = on ? color + "22" : "";
   btn.style.borderColor  = on ? color : "#252a3d";
-  btn.style.color        = on ? color : "#4a5170";
+  btn.style.color        = on ? color : "#8591b8";
 }
 
 
@@ -287,24 +333,11 @@ function renderMainChart() {
     });
   }
 
-  // ── Build a consistent ticker→color map across all strategies ─────
-  // Same ETF always gets the same color regardless of which strip it's in.
-  const tickerColorMap = {};
-  let colorIdx = 0;
-  for (const sk of ["top1_top1", "top2_top2", "d1_composite", "d2_composite",
-                    "d1_accel", "d2_accel", "d1_lowcorr", "d2_lowcorr"]) {
-    const alloc = DATA?.strategies?.[sk]?.allocation;
-    if (!alloc?.tickers) continue;
-    alloc.tickers.forEach((t, i) => {
-      if (!(t in tickerColorMap) && alloc.weights.some(row => row[i] > 0))
-        tickerColorMap[t] = ALLOC_PALETTE[colorIdx++ % ALLOC_PALETTE.length];
-    });
-  }
-
   // ── Helper: build stacked-area series for one allocation strip ────
   function buildAllocSeries(stratKey, xIdx, yIdx) {
     const alloc = DATA?.strategies?.[stratKey]?.allocation;
     if (!alloc?.tickers?.length) return [];
+    const isPPM = stratKey === "ppm_top3";
     return alloc.tickers
       .map((t, i) => ({ t, i }))
       .filter(({ i }) => alloc.weights.some(row => row[i] > 0))
@@ -312,10 +345,11 @@ function renderMainChart() {
         const pts = alloc.dates
           .map((d, ri) => [d, alloc.weights[ri][i]])
           .filter(([d]) => d >= startDate);
+        const color = isPPM ? (ppmColorMap[t] || "#8591b8") : (tickerColorMap[t] || "#8591b8");
         return {
-          name: tickerLabel(t), type: "line",
+          name: isPPM ? t : tickerLabel(t), type: "line",
           stack: `alloc-${stratKey}`,
-          areaStyle: { color: tickerColorMap[t] || "#4a5170", opacity: 0.88 },
+          areaStyle: { color, opacity: 0.88 },
           lineStyle: { width: 0 },
           symbol: "none",
           step: "end",
@@ -325,10 +359,72 @@ function renderMainChart() {
       });
   }
 
-  const allocD1raw  = buildAllocSeries("top1_top1",    1, 1);
-  const allocD1comp = buildAllocSeries("d1_composite",  2, 2);
-  const allocD2raw  = buildAllocSeries("top2_top2",     3, 3);
-  const allocD2comp = buildAllocSeries("d2_composite",  4, 4);
+  // ── Dynamic allocation strips ──────────────────────────────────────
+  const STRIP_CANDIDATES = [
+    "top1_top1","d1_composite","d1_accel","d1_lowcorr",
+    "top2_top2","d2_composite","d2_accel","d2_lowcorr","ppm_top3",
+  ];
+  const activeStrips = STRIP_CANDIDATES.filter(
+    k => activeKeys.has(k) && DATA?.strategies?.[k]?.allocation?.tickers?.length
+  );
+  const N = activeStrips.length;
+
+  // Grids: perf fills top half when strips present, else full height
+  const dynGrids = [];
+  if (N > 0) {
+    dynGrids.push({ top: 16, left: 60, right: 20, bottom: "52%" });
+    const avail = 48;  // percent from 50% to 98%
+    for (let i = 0; i < N; i++) {
+      const top = (50 + avail * i / N).toFixed(1);
+      if (i < N - 1) {
+        const h = (avail / N * 0.84).toFixed(1);
+        dynGrids.push({ top: `${top}%`, left: 60, right: 20, height: `${h}%` });
+      } else {
+        dynGrids.push({ top: `${top}%`, left: 60, right: 20, bottom: 26 });
+      }
+    }
+  } else {
+    dynGrids.push({ top: 16, left: 60, right: 20, bottom: 26 });
+  }
+
+  // xAxes: one per grid, last strip (or perf if N===0) shows date labels
+  const dynXAxes = [{
+    type: "time", gridIndex: 0, min: startDate,
+    axisLabel: N === 0 ? { color: "#8591b8", fontSize: 10 } : { show: false },
+    axisLine:  { lineStyle: { color: "#252a3d" } },
+    splitLine: { show: false },
+    axisTick:  N === 0 ? { lineStyle: { color: "#252a3d" } } : { show: false },
+  }];
+  for (let i = 0; i < N; i++) {
+    const isLast = i === N - 1;
+    dynXAxes.push({
+      type: "time", gridIndex: i + 1, min: startDate,
+      axisLabel: isLast ? { color: "#8591b8", fontSize: 10 } : { show: false },
+      axisLine:  { lineStyle: { color: "#252a3d" } },
+      splitLine: { show: false },
+      axisTick:  isLast ? { lineStyle: { color: "#252a3d" } } : { show: false },
+    });
+  }
+
+  // yAxes: one per grid
+  const dynYAxes = [{
+    type: "value", gridIndex: 0,
+    axisLabel: { color: "#8591b8", fontSize: 10, formatter: v => v.toFixed(0) },
+    axisLine:  { show: false },
+    splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
+    axisTick:  { show: false },
+  }];
+  for (let i = 0; i < N; i++) {
+    const key = activeStrips[i];
+    const c = SERIES_CFG[key] || {};
+    dynYAxes.push({
+      type: "value", gridIndex: i + 1, max: 100, min: 0,
+      name: c.label || key, nameLocation: "end",
+      nameTextStyle: { color: c.color || "#8591b8", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
+      axisLabel: { show: false }, axisLine: { show: false },
+      splitLine: { show: false }, axisTick: { show: false },
+    });
+  }
 
   // ── Tooltip formatter ─────────────────────────────────────────────
   function tooltipFormatter(params) {
@@ -343,93 +439,39 @@ function renderMainChart() {
       </div>`
     ).join("");
 
-    const allocSection = ["top1_top1", "d1_composite", "d1_accel", "d1_lowcorr",
-                          "top2_top2", "d2_composite", "d2_accel", "d2_lowcorr"].map(k => {
+    const ALLOC_KEYS = ["top1_top1","d1_composite","d1_accel","d1_lowcorr",
+                        "top2_top2","d2_composite","d2_accel","d2_lowcorr","ppm_top3"];
+    const allocSection = ALLOC_KEYS.filter(k => activeKeys.has(k)).map(k => {
       const holdings = allocAtDate(k, dateStr);
       if (!holdings) return "";
       const c = SERIES_CFG[k] || {};
+      const isPPM = k === "ppm_top3";
       const chips = Object.entries(holdings).map(([t, w]) => {
-        const color = tickerColorMap[t] || "#4a5170";
+        const color = isPPM ? (c.color || "#06b6d4") : (tickerColorMap[t] || "#8591b8");
+        const label = isPPM ? t : tickerLabel(t);
         return `<span style="background:${color}22;border:1px solid ${color}55;border-radius:3px;padding:1px 5px;margin:1px 2px 1px 0;display:inline-block;color:${color}">
-          ${tickerLabel(t)}<span style="opacity:.65;margin-left:3px">${Math.round(w * 100)}%</span>
+          ${label}<span style="opacity:.65;margin-left:3px">${Math.round(w * 100)}%</span>
         </span>`;
       }).join("");
       return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #252a3d">
-        <span style="color:${c.color || "#4a5170"};font-size:10px;font-weight:600">${c.label || k}</span>
+        <span style="color:${c.color || "#8591b8"};font-size:10px;font-weight:600">${c.label || k}</span>
         <div style="margin-top:3px;line-height:2">${chips}</div>
       </div>`;
     }).join("");
 
     return `<div style="font-size:11px;max-width:320px">
-      <div style="color:#4a5170;margin-bottom:6px">${dateStr}</div>
+      <div style="color:#8591b8;margin-bottom:6px">${dateStr}</div>
       ${perfRows}${allocSection}
     </div>`;
   }
 
-  // ── ECharts option — 5 grids, all x-axes share startDate min ─────
+  // ── ECharts option — dynamic grids ────────────────────────────────
   mainChart.setOption({
     backgroundColor: "transparent",
     animation: false,
-
-    grid: [
-      { top: 16,    left: 60, right: 20, bottom: "52%" },   // perf
-      { top: "50%", left: 60, right: 20, height: "10%" },   // D1-raw strip
-      { top: "62%", left: 60, right: 20, height: "10%" },   // D1-composite strip
-      { top: "74%", left: 60, right: 20, height: "10%" },   // D2-raw strip
-      { top: "86%", left: 60, right: 20, bottom: 26 },      // D2-composite strip
-    ],
-
-    xAxis: [
-      { type: "time", gridIndex: 0, min: startDate,
-        axisLabel: { show: false },
-        axisLine:  { lineStyle: { color: "#252a3d" } },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "time", gridIndex: 1, min: startDate,
-        axisLabel: { show: false },
-        axisLine:  { lineStyle: { color: "#252a3d" } },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "time", gridIndex: 2, min: startDate,
-        axisLabel: { show: false },
-        axisLine:  { lineStyle: { color: "#252a3d" } },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "time", gridIndex: 3, min: startDate,
-        axisLabel: { show: false },
-        axisLine:  { lineStyle: { color: "#252a3d" } },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "time", gridIndex: 4, min: startDate,
-        axisLabel: { color: "#4a5170", fontSize: 10 },
-        axisLine:  { lineStyle: { color: "#252a3d" } },
-        splitLine: { show: false },
-        axisTick:  { lineStyle: { color: "#252a3d" } } },
-    ],
-
-    yAxis: [
-      { type: "value", gridIndex: 0,
-        axisLabel: { color: "#4a5170", fontSize: 10, formatter: v => v.toFixed(0) },
-        axisLine:  { show: false },
-        splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
-        axisTick:  { show: false } },
-      { type: "value", gridIndex: 1, max: 100, min: 0,
-        name: "D1-raw", nameLocation: "end",
-        nameTextStyle: { color: "#5b6ef5", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
-        axisLabel: { show: false }, axisLine: { show: false },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "value", gridIndex: 2, max: 100, min: 0,
-        name: "D1-comp", nameLocation: "end",
-        nameTextStyle: { color: "#10b981", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
-        axisLabel: { show: false }, axisLine: { show: false },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "value", gridIndex: 3, max: 100, min: 0,
-        name: "D2-raw", nameLocation: "end",
-        nameTextStyle: { color: "#a78bfa", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
-        axisLabel: { show: false }, axisLine: { show: false },
-        splitLine: { show: false }, axisTick: { show: false } },
-      { type: "value", gridIndex: 4, max: 100, min: 0,
-        name: "D2-comp", nameLocation: "end",
-        nameTextStyle: { color: "#34d399", fontSize: 9, fontWeight: 600, padding: [0, 0, 4, 0] },
-        axisLabel: { show: false }, axisLine: { show: false },
-        splitLine: { show: false }, axisTick: { show: false } },
-    ],
+    grid: dynGrids,
+    xAxis: dynXAxes,
+    yAxis: dynYAxes,
 
     tooltip: {
       trigger: "axis",
@@ -438,7 +480,7 @@ function renderMainChart() {
       textStyle:       { color: "#c9d1e0", fontSize: 12 },
       axisPointer: {
         type: "cross",
-        crossStyle: { color: "#4a517066" },
+        crossStyle: { color: "#8591b866" },
         link: [{ xAxisIndex: "all" }],
       },
       formatter: tooltipFormatter,
@@ -446,20 +488,106 @@ function renderMainChart() {
 
     legend: { show: false },
 
-    series: [...perfSeries, ...allocD1raw, ...allocD1comp, ...allocD2raw, ...allocD2comp],
+    series: [...perfSeries, ...activeStrips.flatMap((k, i) => buildAllocSeries(k, i + 1, i + 1))],
   }, true);
 }
 
 // ── Signal cards ───────────────────────────────────────────────────
 function renderSignalCards() {
-  renderSignalCard("signal-d1",    DATA?.strategies?.top1_top1,    "D1 — raw",      "top1_top1");
-  renderSignalCard("signal-d1c",   DATA?.strategies?.d1_composite, "D1-composite",  "d1_composite");
-  renderSignalCard("signal-d1a",   DATA?.strategies?.d1_accel,     "D1-accel.",     "d1_accel");
-  renderSignalCard("signal-d1lc",  DATA?.strategies?.d1_lowcorr,   "D1-low-corr.",  "d1_lowcorr");
-  renderSignalCard("signal-d2",    DATA?.strategies?.top2_top2,    "D2 — raw",      "top2_top2");
-  renderSignalCard("signal-d2c",   DATA?.strategies?.d2_composite, "D2-composite",  "d2_composite");
-  renderSignalCard("signal-d2a",   DATA?.strategies?.d2_accel,     "D2-accel.",     "d2_accel");
-  renderSignalCard("signal-d2lc",  DATA?.strategies?.d2_lowcorr,   "D2-low-corr.",  "d2_lowcorr");
+  const D1_CARDS = [
+    { elId: "signal-d1",   key: "top1_top1",    title: "D1 — raw"     },
+    { elId: "signal-d1c",  key: "d1_composite", title: "D1-composite" },
+    { elId: "signal-d1a",  key: "d1_accel",     title: "D1-accel."    },
+    { elId: "signal-d1lc", key: "d1_lowcorr",   title: "D1-low-corr." },
+  ];
+  const D2_CARDS = [
+    { elId: "signal-d2",   key: "top2_top2",    title: "D2 — raw"     },
+    { elId: "signal-d2c",  key: "d2_composite", title: "D2-composite" },
+    { elId: "signal-d2a",  key: "d2_accel",     title: "D2-accel."    },
+    { elId: "signal-d2lc", key: "d2_lowcorr",   title: "D2-low-corr." },
+  ];
+
+  function renderRow(cards, rowId) {
+    let anyActive = false;
+    for (const { elId, key, title } of cards) {
+      const el = document.getElementById(elId);
+      if (!el) continue;
+      if (!activeKeys.has(key)) {
+        el.innerHTML = "";
+        el.style.display = "none";
+      } else {
+        el.style.display = "";
+        renderSignalCard(elId, DATA?.strategies?.[key], title, key);
+        anyActive = true;
+      }
+    }
+    const row = document.getElementById(rowId);
+    if (row) row.style.display = anyActive ? "" : "none";
+  }
+
+  renderRow(D1_CARDS, "signal-row-d1");
+  renderRow(D2_CARDS, "signal-row-d2");
+
+  const ppmEl  = document.getElementById("signal-ppm");
+  const ppmRow = document.getElementById("signal-row-ppm");
+  if (ppmEl) {
+    if (!activeKeys.has("ppm_top3")) {
+      ppmEl.innerHTML = "";
+      ppmEl.style.display = "none";
+      if (ppmRow) ppmRow.style.display = "none";
+    } else {
+      ppmEl.style.display = "";
+      if (ppmRow) ppmRow.style.display = "";
+      renderPPMSignalCard("signal-ppm", DATA?.strategies?.ppm_top3);
+    }
+  }
+}
+
+function renderPPMSignalCard(elId, strat) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!strat?.current_signal) { el.innerHTML = ""; return; }
+  const { date, holdings } = strat.current_signal;
+  const key   = "ppm_top3";
+  const spec  = STRATEGY_SPECS[key];
+  const color = spec?.color || "#06b6d4";
+
+  const rows = (holdings || []).map(h => {
+    const pct = Math.round(h.weight * 100);
+    const ppmLink = `<a href="https://www.pensionsmyndigheten.se/service/fondtorget/fond/${h.ticker}"
+        target="_blank" rel="noopener"
+        class="text-xs text-accent hover:underline font-mono">${h.ticker}</a>`;
+    return `
+      <div class="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs font-medium text-slate-300">${h.label}</span>
+            ${ppmLink}
+            <span class="text-xs px-1.5 rounded-sm bg-cyan-900/50 text-cyan-300">PPM</span>
+          </div>
+          ${h.nordnet_name ? `<p class="text-xs text-muted mt-0.5 truncate">${h.nordnet_name}</p>` : ""}
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <span class="text-xs text-muted">${pct}%</span>
+        </div>
+      </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="flex items-center justify-between mb-3">
+      <button onclick="openSpecModal('${key}')"
+              class="flex items-center gap-2 group text-left">
+        <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
+        <span class="text-xs font-semibold tracking-widest uppercase transition-colors"
+              style="color:${color}">PPM top-3</span>
+        <svg class="w-3 h-3 text-muted group-hover:text-slate-400 transition-colors flex-shrink-0"
+             fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+        </svg>
+      </button>
+      <span class="text-xs text-muted">${date}</span>
+    </div>
+    ${rows || '<p class="text-xs text-muted italic">Kontanter — abs-mom filter aktivt (AP7 Räntefond)</p>'}`;
 }
 
 function renderSignalCard(elId, strat, title, key) {
@@ -520,7 +648,7 @@ function openSpecModal(key) {
   const color = spec.color;
 
   function pct(v) { return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%"; }
-  function colorStyle(v) { return v == null ? "color:#4a5170" : v >= 0 ? "color:#10b981" : "color:#f43f5e"; }
+  function colorStyle(v) { return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e"; }
 
   const statsHtml = st ? `
     <div class="grid grid-cols-3 gap-3 mt-4">
@@ -588,159 +716,225 @@ function renderStats() {
   if (!el) return;
   const strategies = DATA?.strategies || {};
 
-  // ── Summary metrics ──────────────────────────────────────────────
-  const STRATS = [
+  const ETF_STRATS = [
     { key: "top1_top1",    label: "D1 — raw",       color: "#5b6ef5" },
     { key: "d1_composite", label: "D1-composite",    color: "#10b981" },
     { key: "d1_accel",     label: "D1-accel.",       color: "#f59e0b" },
     { key: "d1_lowcorr",   label: "D1-low-corr.",    color: "#f43f5e" },
-    { key: "top2_top2",    label: "D2 — raw",       color: "#a78bfa" },
+    { key: "top2_top2",    label: "D2 — raw",        color: "#a78bfa" },
     { key: "d2_composite", label: "D2-composite",    color: "#34d399" },
     { key: "d2_accel",     label: "D2-accel.",       color: "#fcd34d" },
     { key: "d2_lowcorr",   label: "D2-low-corr.",    color: "#fb7185" },
   ];
+  const PPM_STRAT  = { key: "ppm_top3", label: "PPM top-3", color: "#06b6d4" };
+  const activeETF  = ETF_STRATS.filter(s => activeKeys.has(s.key));
+  const ppmActive  = activeKeys.has("ppm_top3");
+  const activeAll  = [...activeETF, ...(ppmActive ? [PPM_STRAT] : [])];
+
+  if (!activeETF.length && !ppmActive) { el.innerHTML = ""; return; }
 
   function pct(v, decimals = 1) {
     return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(decimals) + "%";
   }
-  function colorClass(v) {
-    if (v == null) return "color:#4a5170";
-    return v >= 0 ? "color:#10b981" : "color:#f43f5e";
+  function colorVal(v) {
+    return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e";
   }
 
-  const summaryCards = STRATS.map(({ key, label, color }) => {
-    const st = strategies[key]?.stats;
+  // ── Summary card — same 6-metric format for ETF and PPM ──────────
+  function summaryCard({ key, label, color }) {
+    const st  = strategies[key]?.stats;
     if (!st) return "";
+    const nav = strategies[key]?.nav || [];
+    const period = nav.length
+      ? `<span class="text-xs text-muted ml-auto">${nav[0].date} → ${nav[nav.length-1].date}</span>`
+      : "";
+    const isPPM = key === "ppm_top3";
     return `
-      <div class="bg-panel border border-border rounded-lg p-4">
-        <div class="flex items-center gap-2 mb-3">
-          <button onclick="openSpecModal('${key}')"
-                  class="flex items-center gap-2 group text-left">
+      <div class="bg-panel border border-border rounded-lg p-4"${isPPM ? ` style="border-color:${color}33"` : ""}>
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group text-left">
             <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>
-            <span class="text-xs font-semibold tracking-widest uppercase transition-colors group-hover:text-slate-200"
+            <span class="text-xs font-semibold tracking-widest uppercase group-hover:text-slate-200 transition-colors"
                   style="color:${color}">${label}</span>
-            <svg class="w-3 h-3 text-muted group-hover:text-slate-400 transition-colors"
+            <svg class="w-3 h-3 text-muted group-hover:text-slate-400 transition-colors flex-shrink-0"
                  fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
             </svg>
           </button>
+          ${period}
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div>
-            <p class="text-xs text-muted mb-0.5">CAGR</p>
-            <p class="text-lg font-semibold" style="${colorClass(st.cagr)}">${pct(st.cagr)}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted mb-0.5">Sharpe</p>
-            <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted mb-0.5">Max DD <span class="text-muted font-normal">(daglig)</span></p>
-            <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.max_dd)}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted mb-0.5">Max DD <span class="text-muted font-normal">(månadsslut)</span></p>
-            <p class="text-lg font-semibold" style="color:#fb923c">${pct(st.max_dd_monthly)}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted mb-0.5">Volatilitet</p>
-            <p class="text-lg font-semibold text-slate-300">${pct(st.ann_vol)}</p>
-          </div>
-          <div>
-            <p class="text-xs text-muted mb-0.5">Total</p>
-            <p class="text-lg font-semibold" style="${colorClass(st.total)}">${pct(st.total)}</p>
-          </div>
+          <div><p class="text-xs text-muted mb-0.5">CAGR</p>
+            <p class="text-lg font-semibold" style="${colorVal(st.cagr)}">${pct(st.cagr)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
+            <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Max DD <span class="font-normal">(dag)</span></p>
+            <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.max_dd)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Max DD <span class="font-normal">(mån)</span></p>
+            <p class="text-lg font-semibold" style="color:#fb923c">${pct(st.max_dd_monthly)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
+            <p class="text-lg font-semibold text-slate-300">${pct(st.ann_vol)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Total</p>
+            <p class="text-lg font-semibold" style="${colorVal(st.total)}">${pct(st.total)}</p></div>
         </div>
       </div>`;
-  }).join("");
+  }
 
-  // ── Annual table (two side-by-side tables, one per strategy) ─────
+  // ── Annual tables — only active strategies ────────────────────────
   const allYears = [...new Set(
-    STRATS.flatMap(({ key }) => Object.keys(strategies[key]?.stats?.annual || {}))
+    activeAll.flatMap(({ key }) => Object.keys(strategies[key]?.stats?.annual || {}))
   )].sort();
 
   function annualTable({ key, label, color }) {
     const annual = strategies[key]?.stats?.annual || {};
     const header = `<thead><tr>
       <th class="text-left pb-2 pr-3 text-xs font-semibold" style="color:${color}">${label}</th>
-      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Avkastning</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Avk.</th>
       <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Sharpe</th>
       <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Max DD</th>
-      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">DD månadsslut</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">DD mån</th>
       <th class="text-right pb-2 pl-2 text-xs text-muted font-normal">Vol</th>
     </tr></thead>`;
     const rows = allYears.map(yr => {
       const a = annual[yr];
-      const ret   = a?.ret;
-      const sh    = a?.sharpe;
-      const dd    = a?.max_dd;
-      const ddmo  = a?.max_dd_mo;
-      const vol   = a?.vol;
       return `<tr class="border-t border-border">
         <td class="py-1.5 pr-3 text-xs text-slate-400">${yr}</td>
-        <td class="text-right py-1.5 px-2 text-xs font-medium tabular-nums" style="${colorClass(ret)}">${pct(ret)}</td>
-        <td class="text-right py-1.5 px-2 text-xs tabular-nums text-slate-300">${sh != null ? sh.toFixed(2) : "—"}</td>
-        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#f43f5e">${pct(dd)}</td>
-        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#fb923c">${pct(ddmo)}</td>
-        <td class="text-right py-1.5 pl-2 text-xs tabular-nums text-slate-400">${pct(vol)}</td>
+        <td class="text-right py-1.5 px-2 text-xs font-medium tabular-nums" style="${colorVal(a?.ret)}">${pct(a?.ret)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums text-slate-300">${a?.sharpe != null ? a.sharpe.toFixed(2) : "—"}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#f43f5e">${pct(a?.max_dd)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#fb923c">${pct(a?.max_dd_mo)}</td>
+        <td class="text-right py-1.5 pl-2 text-xs tabular-nums text-slate-400">${pct(a?.vol)}</td>
       </tr>`;
     }).join("");
     return `<table class="w-full border-collapse">${header}<tbody>${rows}</tbody></table>`;
   }
 
+  let annualPairs = "";
+  for (let i = 0; i < activeETF.length; i += 2) {
+    annualPairs += `<div class="grid grid-cols-1 xl:grid-cols-2 gap-6${i > 0 ? " mt-6" : ""}">
+      ${annualTable(activeETF[i])}
+      ${activeETF[i+1] ? annualTable(activeETF[i+1]) : ""}
+    </div>`;
+  }
+
   const annualSection = `
     <div class="bg-panel border border-border rounded-lg p-4">
-      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per Year — full-period summary in the cards above</p>
-      ${[0,2,4,6].map(i => `
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 ${i > 0 ? 'mt-6' : ''}">
-          ${STRATS[i] ? annualTable(STRATS[i]) : ""}
-          ${STRATS[i+1] ? annualTable(STRATS[i+1]) : ""}
-        </div>`).join("")}
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per år</p>
+      ${annualPairs}
+      ${ppmActive ? `<div class="${activeETF.length ? "mt-6 pt-5 border-t border-border" : ""}">
+        ${activeETF.length ? '<p class="text-xs font-semibold text-muted uppercase tracking-widest mb-3">PPM Fondtorg</p>' : ""}
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">${annualTable(PPM_STRAT)}</div>
+      </div>` : ""}
     </div>`;
 
-  // ── Monthly heatmap ──────────────────────────────────────────────
+  // ── Monthly heatmaps ──────────────────────────────────────────────
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
   function heatCell(v) {
     if (v == null) return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 text-muted">—</span></td>`;
-    const abs = Math.abs(v);
-    const alpha = Math.min(abs / 0.08, 1);  // saturates at 8%
-    const bg = v >= 0
-      ? `rgba(16,185,129,${(alpha * 0.7).toFixed(2)})`
-      : `rgba(244,63,94,${(alpha * 0.7).toFixed(2)})`;
+    const alpha = Math.min(Math.abs(v) / 0.08, 1);
+    const bg  = v >= 0 ? `rgba(16,185,129,${(alpha*.7).toFixed(2)})` : `rgba(244,63,94,${(alpha*.7).toFixed(2)})`;
     const txt = v >= 0 ? "#6ee7b7" : "#fca5a5";
     return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 tabular-nums" style="background:${bg};color:${txt}">${pct(v, 0)}</span></td>`;
   }
 
-  const heatmaps = STRATS.map(({ key, label, color }) => {
+  function buildHeatmap({ key, label, color }) {
     const monthly = strategies[key]?.stats?.monthly;
     if (!monthly) return "";
     const years = Object.keys(monthly).sort();
-    const header = `<tr>
-      <th class="text-left pb-1 pr-2 text-xs text-muted font-normal w-12"></th>
+    const header = `<tr><th class="text-left pb-1 pr-2 text-xs text-muted font-normal w-12"></th>
       ${MONTHS.map(m => `<th class="text-center pb-1 px-0.5 text-xs text-muted font-normal">${m}</th>`).join("")}
     </tr>`;
     const rows = years.map(yr => {
-      const cells = Array.from({length: 12}, (_, i) => heatCell(monthly[yr]?.[String(i + 1)]));
+      const cells = Array.from({length:12}, (_,i) => heatCell(monthly[yr]?.[String(i+1)]));
       return `<tr><td class="pr-2 text-xs text-slate-400 py-0.5">${yr}</td>${cells.join("")}</tr>`;
     }).join("");
-    return `
-      <div>
-        <p class="text-xs font-semibold mb-2" style="color:${color}">${label} — monthly returns</p>
-        <div class="overflow-x-auto">
-          <table class="w-full min-w-max border-collapse text-xs">
-            <thead>${header}</thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </div>`;
-  }).join("");
+    return `<div>
+      <p class="text-xs font-semibold mb-2" style="color:${color}">${label} — monthly returns</p>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-max border-collapse text-xs">
+          <thead>${header}</thead><tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  const etfHeatmaps = activeETF.map(buildHeatmap).filter(Boolean).join("");
+  const ppmHeatmap  = ppmActive ? buildHeatmap(PPM_STRAT) : "";
+
+  const heatmapSection = (etfHeatmaps || ppmHeatmap) ? `
+    <div class="bg-panel border border-border rounded-lg p-4 space-y-8">
+      ${etfHeatmaps}
+      ${ppmHeatmap ? `<div class="${etfHeatmaps ? "pt-5 border-t border-border " : ""}space-y-4">
+        ${etfHeatmaps ? '<p class="text-xs font-semibold text-muted uppercase tracking-widest">PPM Fondtorg</p>' : ""}
+        ${ppmHeatmap}
+      </div>` : ""}
+    </div>` : "";
+
+  // ── Historical holdings ───────────────────────────────────────────
+  // Build full-name lookups
+  const snap = DATA?.config_snapshot || {};
+  const etfFullNameMap = {};
+  for (const v of Object.values(snap.factor_sleeve || {}))
+    etfFullNameMap[v.ticker] = v.nordnet_name || v.ticker;
+  for (const v of Object.values(snap.sector_sleeve || {}))
+    etfFullNameMap[v.ticker] = v.nordnet_name || v.ticker;
+  if (snap.cash_proxy) etfFullNameMap[snap.cash_proxy.ticker] = "Cash";
+  const ppmFundNames = DATA?.strategies?.ppm_top3?.fund_names || {};
+
+  function buildAllocHistory({ key, label, color }) {
+    const alloc = strategies[key]?.allocation;
+    if (!alloc?.dates?.length) return "";
+    const isPPM = key === "ppm_top3";
+    const rows = [...alloc.dates].reverse().map((date, ri) => {
+      const origIdx = alloc.dates.length - 1 - ri;
+      const row = alloc.weights[origIdx];
+      const holdings = alloc.tickers
+        .map((t, i) => ({ t, w: row[i] }))
+        .filter(({ w }) => w > 0)
+        .sort((a, b) => b.w - a.w);
+      const chips = holdings.map(({ t, w }) => {
+        const c = isPPM ? (ppmColorMap[t] || color) : (tickerColorMap[t] || "#8591b8");
+        const fullName = isPPM ? (ppmFundNames[t] || t) : (etfFullNameMap[t] || tickerLabel(t));
+        const shortLabel = isPPM ? t : tickerLabel(t);
+        return `<span style="background:${c}22;border:1px solid ${c}44;color:${c};border-radius:3px;padding:2px 7px;font-size:10px;display:inline-block;margin:1px 2px 1px 0" title="${shortLabel}">
+          ${fullName} <span style="opacity:.6">${Math.round(w*100)}%</span>
+        </span>`;
+      }).join("");
+      return `<tr class="border-b border-border/30 hover:bg-white/[0.015]">
+        <td class="py-1.5 pr-4 text-xs text-slate-500 tabular-nums whitespace-nowrap">${date}</td>
+        <td class="py-1.5">${chips}</td>
+      </tr>`;
+    }).join("");
+    return `<div>
+      <p class="text-xs font-semibold mb-2" style="color:${color}">${label} — ${alloc.dates.length} rebalanseringar</p>
+      <div class="overflow-y-auto" style="max-height:20rem">
+        <table class="w-full border-collapse"><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
+  }
+
+  const allocSections = activeAll.map(buildAllocHistory).filter(Boolean);
+  const allocSection = allocSections.length ? `
+    <div class="bg-panel border border-border rounded-lg p-4 space-y-6">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Historiska innehav</p>
+      ${allocSections.join('<div class="pt-2 border-t border-border/40"></div>')}
+    </div>` : "";
+
+  // ── Assemble ──────────────────────────────────────────────────────
+  const etfCards = activeETF.map(summaryCard).join("");
+  const ppmCard  = ppmActive ? summaryCard(PPM_STRAT) : "";
 
   el.innerHTML = `
     <div class="space-y-5">
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaryCards}</div>
+      ${etfCards ? `<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${etfCards}</div>` : ""}
+      ${ppmCard ? `<div class="space-y-3">
+        <p class="text-xs font-semibold text-muted uppercase tracking-widest px-1">PPM Fondtorg</p>
+        ${ppmCard}
+      </div>` : ""}
       ${annualSection}
-      <div class="bg-panel border border-border rounded-lg p-4 space-y-8">${heatmaps}</div>
+      ${heatmapSection}
+      ${allocSection}
     </div>`;
 }
 
@@ -854,49 +1048,64 @@ const FUND_MAPPINGS = [
   {
     sleeve: "Faktor", label: "USA MOM", ticker: "QDVA.DE", isin: "IE00BD1F4N50",
     name: "iShares Edge MSCI USA Momentum Factor UCITS ETF",
-    nordnet: { name: "QDVA.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: BlackRock US Flexible Equity A2", nr: "804385", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Handelsbanken Amerika Tema A1 SEK", note: "~97% USA, tillväxt/momentum-profil", fee: "1.60%", quality: "partial" },
+    ppm: { name: "Öhman Global Growth A", sub: "~65% USA, fokus tillväxt/innovation — implicit momentum", nr: "163923", quality: "partial",
+           alt: "Storebrand Global Multifactor A (162099) — enda multifaktorfonden i PPM" },
   },
   {
     sleeve: "Faktor", label: "USA QUAL", ticker: "QDVB.DE", isin: "IE00BD1F4L38",
     name: "iShares Edge MSCI USA Quality Factor UCITS ETF",
-    nordnet: { name: "QDVB.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: BlackRock US Flexible Equity A2", nr: "804385", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Länsförsäkringar USA Aktiv A", isin: "SE0005191982", note: "Explicit kvalitetsmandat: hög ROE, låg skuldsättning", fee: "1.60%", quality: "partial" },
+    ppm: { name: "Länsförsäkringar USA Aktiv A", sub: "Målbolag med 'hög kvalitet till attraktiv värdering'", nr: "456475", quality: "partial",
+           alt: "Fidelity America Fund A (850776) — kvalitet/värde-blend" },
   },
   {
     sleeve: "Faktor", label: "USA VAL", ticker: "QDVI.DE", isin: "IE00BD1F4M44",
     name: "iShares Edge MSCI USA Value Factor UCITS ETF",
-    nordnet: { name: "QDVI.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: Länsförsäkringar USA Aktiv A", nr: "456475", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "BGF US Basic Value A2", note: "Explicita värdeaktier USA large-cap", fee: "~1.50%", quality: "good" },
+    ppm: { name: "BlackRock – US Basic Value A2", sub: "Explicit värdemandat, USA large-cap", nr: "768556", quality: "good",
+           alt: "Fidelity America Fund A (850776)" },
   },
   {
     sleeve: "Faktor", label: "USA SMALL", ticker: "SXRG.DE", isin: "IE00B3VWM098",
     name: "iShares MSCI USA Small Cap ESG Enhanced CTB UCITS ETF",
-    nordnet: { name: "SXRG.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match (ESG-variant)", quality: "exact" },
-    ppm: { name: "SEB Nordamerikafond Små och Medelstora Bolag A", sub: "Aktiv förvaltning, US small/mid-cap", nr: "916354", quality: "good" },
+    nordnet_etf: { note: "Exakt match, ESG-variant (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Carnegie US Small & Micro Cap", note: "Aktiv, US small/micro-cap, koncentrerad portfölj", fee: "1.60%", quality: "good" },
+    ppm: { name: "SEB Nordamerikafond Små och Medelstora Bolag A", sub: "Aktiv förvaltning, US small/mid-cap", nr: "916354", quality: "good",
+           alt: "BL – American Small & Mid Caps B (285990)" },
   },
   {
     sleeve: "Faktor", label: "EUR MOM", ticker: "CEMR.DE", isin: "IE00BQN1K786",
     name: "iShares Edge MSCI Europe Momentum Factor UCITS ETF",
-    nordnet: { name: "CEMR.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: Storebrand Europa A", nr: "140673", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "MS INVF Europe Opportunity A", isin: "LU1387591305", note: "Europa tillväxt/momentum — ASML, Moncler, Spotify", fee: "1.74%", quality: "partial" },
+    ppm: { name: "Swedbank Robur Europafond A", sub: "Europa tillväxtbolag, implicit momentumtilt", nr: "160267", quality: "partial",
+           alt: "Storebrand Global Multifactor A (162099) — inkl. Europa momentum" },
   },
   {
     sleeve: "Faktor", label: "EUR QUAL", ticker: "CEMQ.DE", isin: "IE00BQN1K562",
     name: "iShares Edge MSCI Europe Quality Factor UCITS ETF",
-    nordnet: { name: "CEMQ.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: Storebrand Europa A", nr: "140673", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Comgest Growth Europe", isin: "IE00B0XJXQ01", note: "Renodlad kvalitet/tillväxt Europa — Comgest är kvalitetsfokuserade förvaltare", fee: "~1.60%", quality: "good" },
+    ppm: { name: "JPMorgan Europe Sustainable Equity Fund", sub: "FTN-godkänd, kvalitet/tillväxt-mandat Europa", nr: "124438", quality: "partial",
+           alt: "SEB Europe Equity Fund (988600) — FTN-godkänd" },
   },
   {
     sleeve: "Faktor", label: "EUR VAL", ticker: "CEMS.DE", isin: "IE00BQN1K901",
     name: "iShares Edge MSCI Europe Value Factor UCITS ETF",
-    nordnet: { name: "CEMS.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: AMF Aktiefond Europa", nr: "538462", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Fidelity European Growth A-Dis-EUR", note: "Europa värdebolag/blend, bred exponering", fee: "~1.90%", quality: "partial" },
+    ppm: { name: "AMF Aktiefond Europa", sub: "Bred Europa, låg avgift, värdeinriktad förvaltning", nr: "538462", quality: "partial",
+           alt: "abrdn European Sustainable Equity I Acc EUR (952770)" },
   },
   {
     sleeve: "Faktor", label: "EUR SMALL", ticker: "XXSC.DE", isin: "LU0322253906",
     name: "Xtrackers MSCI Europe Small Cap UCITS ETF 1C",
-    nordnet: { name: "XXSC.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "SEB Europafond Småbolag", isin: "SE0000433252", note: "Aktiv, europeisk small-cap med kvalitetstilt", fee: "1.51%", quality: "good" },
     ppm: { name: "Lannebo Europa Småbolag A", sub: "Aktiv, europeisk small-cap", nr: "182759", quality: "good",
            alt: "SEB Europafond Småbolag (556589)" },
   },
@@ -904,47 +1113,61 @@ const FUND_MAPPINGS = [
   {
     sleeve: "Sektor", label: "IT", ticker: "QDVE.DE", isin: "IE00B3WJKG14",
     name: "iShares S&P 500 Information Technology Sector UCITS ETF",
-    nordnet: { name: "QDVE.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Swedbank Robur Technology A", sub: "US-tung tech, nära S&P 500 IT", nr: "283408", quality: "good",
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Nordnet Teknologi Index", note: "Dedikerad teknikindexfond, Technology Sector Equity, 5★ Morningstar — 4× billigare än aktiva alternativ", fee: "0.40%", quality: "good",
+                   alt: "DNB Teknologi S (1.20%) — aktiv förvaltning, mer global diversifiering" },
+    ppm: { name: "Swedbank Robur Technology A", sub: "US-tung tech, nära S&P 500 IT-profil", nr: "283408", quality: "good",
            alt: "BlackRock World Technology A2 (446088)" },
   },
   {
     sleeve: "Sektor", label: "ENERGY", ticker: "QDVF.DE", isin: "IE00B42NKQ00",
     name: "iShares S&P 500 Energy Sector UCITS ETF",
-    nordnet: { name: "QDVF.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "BlackRock – World Energy A2", sub: "Global energi, ej renodlat S&P 500", nr: "517748", quality: "partial" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "BGF World Energy A2", isin: "LU0122376428", note: "Global energi, ~57% USA — bästa tillgängliga konventionella fond", fee: "2.06%", quality: "partial" },
+    ppm: { name: "BlackRock – World Energy A2", sub: "Global energi, ~57% USA — bäst tillgängligt i PPM", nr: "517748", quality: "partial",
+           alt: "BGF Natural Resources Growth & Income A2 (536806) — bredare" },
   },
   {
     sleeve: "Sektor", label: "HEALTHCARE", ticker: "QDVG.DE", isin: "IE00B43HR379",
     name: "iShares S&P 500 Health Care Sector UCITS ETF",
-    nordnet: { name: "QDVG.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Handelsbanken Hälsovård Tema A1", sub: "Global hälsovård, bred matchning", nr: "644005", quality: "good",
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "DNB Health Care S", note: "Global hälsovård, bred sektorexponering", fee: "~1.20%", quality: "good",
+                   alt: "C WorldWide Healthcare Select 1A (PPM 443895)" },
+    ppm: { name: "Handelsbanken Hälsovård Tema A1", sub: "Global hälsovård, prisvinnande, bred matchning", nr: "644005", quality: "good",
            alt: "DNB Health Care S (255001)" },
   },
   {
     sleeve: "Sektor", label: "CONS DISC", ticker: "QDVK.DE", isin: "IE00B4MCHD36",
     name: "iShares S&P 500 Consumer Discretionary Sector UCITS ETF",
-    nordnet: { name: "QDVK.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: Seligson Global Top 25 Brands", nr: "416982", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "FF – Global Consumer Brands A-Dis-EUR", isin: "LU0114721508", note: "Blandar Cons.Disc + Cons.Stap (Amazon, Netflix, L'Oréal, Nestlé)", fee: "1.90%", quality: "partial" },
+    ppm: { name: "Ingen nära matchning i PPM", sub: "PPM saknar dedikerad Consumer Discretionary-fond", nr: null, quality: "none",
+           alt: "Seligson Global Top 25 Brands A (479550) — 41% consumer discretionary (Amazon, LVMH, Adidas)" },
   },
   {
     sleeve: "Sektor", label: "INDUSTRIALS", ticker: "2B7C.DE", isin: "IE00B4LN9N13",
     name: "iShares S&P 500 Industrials Sector UCITS ETF",
-    nordnet: { name: "2B7C.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Ingen dedikerad industrisektor-fond i PPM", nr: null, quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "Fidelity Global Industrials A-Dis-EUR", isin: "LU0114722902", note: "Dedikerad global industrifond — flygplan, försvar, maskiner, konstruktion (4 ★ Morningstar)", fee: "1.90%", quality: "good" },
+    ppm: { name: "Ingen nära matchning i PPM", sub: "PPM saknar dedikerad Industrials-fond (ej upphandlad av FTN)", nr: null, quality: "none",
+           alt: "Storebrand Global Multifactor A (162099) — enda multifaktorfonden i PPM, ~10% industrials" },
   },
   {
     sleeve: "Sektor", label: "CONS STAP", ticker: "2B7D.DE", isin: "IE00B40B8R38",
     name: "iShares S&P 500 Consumer Staples Sector UCITS ETF",
-    nordnet: { name: "2B7D.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
-    ppm: { name: "Ingen nära matchning", sub: "Närmast: Seligson Global Top 25 Brands", nr: "416982", quality: "none" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "FF – Global Consumer Brands A-Dis-EUR", isin: "LU0114721508", note: "Blandar Cons.Disc + Cons.Stap — Nestlé, P&G, Unilever, Walmart", fee: "1.90%", quality: "partial" },
+    ppm: { name: "Seligson Global Top 25 Brands A", sub: "38% consumer staples (Coca-Cola, PepsiCo, Nestlé) + 41% discretionary — närmaste i PPM", nr: "479550", quality: "partial",
+           alt: "Ingen renodlad consumer staples-fond i PPM" },
   },
   {
     sleeve: "Sektor", label: "MATERIALS", ticker: "2B7B.DE", isin: "IE00B4MKCJ84",
     name: "iShares S&P 500 Materials Sector UCITS ETF",
-    nordnet: { name: "2B7B.DE — direkthandel på Nordnet (Xetra)", note: "Exakt match", quality: "exact" },
+    nordnet_etf: { note: "Exakt match (Xetra)", quality: "exact" },
+    nordnet_fund: { name: "BGF Natural Resources A2", note: "Bredare än ren gruvfond — energi+metaller+jordbruk, ~70% materialsrelaterat", fee: "1.82%", quality: "partial",
+                   alt: "BGF World Mining A2 — smalare, ren gruvfokus" },
     ppm: { name: "BlackRock – World Mining A2", sub: "Metaller/gruvor, saknar kemikalier", nr: "481911", quality: "partial",
-           alt: "Allianz Global Metals and Mining A (502922)" },
+           alt: "BGF Natural Resources Growth & Income A2 (536806) — bredare" },
   },
 ];
 
@@ -963,30 +1186,31 @@ function renderFundsTable() {
   const sleeveColor = { "Faktor": "#5b6ef5", "Sektor": "#10b981" };
 
   let html = `
-    <div class="text-xs text-muted mb-3 flex gap-6">
+    <div class="text-xs text-muted mb-3 flex flex-wrap gap-x-6 gap-y-1">
       <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>Direkt — exakt ETF tillgänglig</span>
       <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-blue-400"></span>Bra matchning — nära index/tema</span>
       <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-amber-400"></span>Partiell — delvis överlapp</span>
-      <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-slate-600"></span>Ingen matchning i PPM-universumet</span>
+      <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-full bg-slate-600"></span>Ingen matchning</span>
     </div>`;
 
   let currentSleeve = null;
   for (const f of FUND_MAPPINGS) {
     if (f.sleeve !== currentSleeve) {
-      if (currentSleeve !== null) html += `</div>`;
+      if (currentSleeve !== null) html += `</tbody></table></div></div>`;
       currentSleeve = f.sleeve;
       const c = sleeveColor[f.sleeve] || "#64748b";
       html += `
         <div class="mb-4">
           <h3 class="text-xs font-semibold tracking-widest uppercase mb-2" style="color:${c}">${f.sleeve}sleeve — Top-1 väljs månadsvis via accelerated momentum</h3>
-          <div class="bg-panel border border-border rounded-lg overflow-hidden">
+          <div class="bg-panel border border-border rounded-lg overflow-x-auto">
             <table class="w-full text-xs">
               <thead>
                 <tr class="border-b border-border text-muted">
                   <th class="px-3 py-2 text-left w-20">Exponering</th>
                   <th class="px-3 py-2 text-left w-24">ETF (Xetra)</th>
                   <th class="px-3 py-2 text-left">Fondnamn</th>
-                  <th class="px-3 py-2 text-left w-64">Nordnet</th>
+                  <th class="px-3 py-2 text-left w-48">Nordnet ETF (direkt)</th>
+                  <th class="px-3 py-2 text-left w-64">Nordnet Fond (konventionell)</th>
                   <th class="px-3 py-2 text-left w-72">PPM-fond</th>
                   <th class="px-3 py-2 text-left w-20">PPM-nr</th>
                 </tr>
@@ -1004,17 +1228,34 @@ function renderFundsTable() {
       ? `<div class="text-muted mt-0.5">Alt: ${f.ppm.alt}</div>`
       : "";
 
+    const fundAlt = f.nordnet_fund.alt
+      ? `<div class="text-muted mt-0.5">Alt: ${f.nordnet_fund.alt}</div>`
+      : "";
+
     html += `
       <tr class="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
         <td class="px-3 py-2.5 font-medium" style="color:${sleeveColor[f.sleeve]}">${f.label}</td>
         <td class="px-3 py-2.5 font-mono text-slate-400">${f.ticker}</td>
         <td class="px-3 py-2.5 text-slate-400">${f.name}</td>
         <td class="px-3 py-2.5">
-          <div class="text-slate-300">${f.nordnet.note}</div>
+          <div class="flex items-start gap-1.5">
+            ${qualityBadge(f.nordnet_etf.quality)}
+            <div class="text-slate-300">${f.nordnet_etf.note}</div>
+          </div>
           <div class="text-muted mt-0.5">${f.ticker} · ${f.isin}</div>
         </td>
         <td class="px-3 py-2.5">
-          <div class="flex items-start gap-2">
+          <div class="flex items-start gap-1.5">
+            ${qualityBadge(f.nordnet_fund.quality)}
+            <div>
+              <div class="text-slate-300">${f.nordnet_fund.name}</div>
+              <div class="text-muted mt-0.5">${f.nordnet_fund.note}${f.nordnet_fund.fee ? ` · ${f.nordnet_fund.fee}` : ""}</div>
+              ${fundAlt}
+            </div>
+          </div>
+        </td>
+        <td class="px-3 py-2.5">
+          <div class="flex items-start gap-1.5">
             ${qualityBadge(f.ppm.quality)}
             <div>
               <div class="text-slate-300">${f.ppm.name}</div>
@@ -1055,3 +1296,497 @@ async function pollForNewData(prevTs, maxWait) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Screening ──────────────────────────────────────────────────────
+async function renderScreening() {
+  const scr = DATA?.screening;
+  if (!scr) {
+    document.getElementById("screen-table").innerHTML =
+      '<p class="text-xs text-muted">Ingen screening-data. Kör engine.py.</p>';
+    return;
+  }
+
+  const sorted    = [...scr.candidates].sort((a, b) => (b.score ?? -99) - (a.score ?? -99));
+  const threshold = scr.portfolio_threshold ?? 0;
+
+  let html = `
+    <div class="text-xs text-muted mb-3">
+      Portfölj-tröskel (D1-ACCEL min score): <span class="text-slate-300 font-medium">${threshold.toFixed(3)}</span>
+      &nbsp;·&nbsp; Beräknad: ${new Date(scr.computed_at).toLocaleString("sv-SE")}
+    </div>
+    <div class="overflow-x-auto">
+    <table class="w-full text-xs border-collapse">
+      <thead>
+        <tr class="text-muted border-b border-border">
+          <th class="text-left py-2 pr-4">Label</th>
+          <th class="text-left py-2 pr-4">Ticker</th>
+          <th class="text-right py-2 pr-4">Score</th>
+          <th class="text-right py-2 pr-4">ROC 63d</th>
+          <th class="text-center py-2 pr-4">Status</th>
+          <th class="text-left py-2 pr-4">Not</th>
+          <th class="text-center py-2">Ta bort</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  for (const c of sorted) {
+    const hasScore    = c.score != null;
+    const wouldSelect = c.would_select === true;
+    const statusBadge = c.error
+      ? `<span class="text-red-400">Fel</span>`
+      : wouldSelect
+        ? `<span class="text-emerald-400 font-medium">● Välj nu</span>`
+        : hasScore && c.roc_63d > 0
+          ? `<span class="text-yellow-400">○ Bevakning</span>`
+          : `<span class="text-muted">– Neutral</span>`;
+
+    const rowColor = wouldSelect ? "text-emerald-300" : "text-slate-300";
+    html += `
+      <tr class="border-b border-border/40 hover:bg-panel/50 ${rowColor}">
+        <td class="py-2 pr-4 font-medium">${c.label}</td>
+        <td class="py-2 pr-4 font-mono text-muted">${c.ticker}</td>
+        <td class="py-2 pr-4 text-right font-mono">${hasScore ? c.score.toFixed(3) : "—"}</td>
+        <td class="py-2 pr-4 text-right font-mono">${c.roc_63d != null ? (c.roc_63d * 100).toFixed(1) + "%" : "—"}</td>
+        <td class="py-2 pr-4 text-center">${statusBadge}</td>
+        <td class="py-2 pr-4 text-muted">${c.note ?? ""}</td>
+        <td class="py-2 text-center">
+          <button onclick="removeScreenCandidate('${c.ticker}')" class="text-muted hover:text-red-400 transition-colors">✕</button>
+        </td>
+      </tr>`;
+  }
+  html += "</tbody></table></div>";
+  document.getElementById("screen-table").innerHTML = html;
+}
+
+async function addScreenCandidate() {
+  const ticker = document.getElementById("screen-ticker").value.trim().toUpperCase();
+  const label  = document.getElementById("screen-label").value.trim();
+  const note   = document.getElementById("screen-note").value.trim();
+  if (!ticker || !label) { alert("Ticker och label krävs"); return; }
+
+  const res = await fetch("/api/screening/add", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ ticker, label, note }),
+  });
+  if (res.ok) {
+    document.getElementById("screen-ticker").value = "";
+    document.getElementById("screen-label").value  = "";
+    document.getElementById("screen-note").value   = "";
+    await loadData();
+  } else {
+    alert("Fel: " + await res.text());
+  }
+}
+
+async function removeScreenCandidate(ticker) {
+  const res = await fetch(`/api/screening/${encodeURIComponent(ticker)}`, { method: "DELETE" });
+  if (res.ok) await loadData();
+}
+
+// ── Documentation page ─────────────────────────────────────────────
+function renderDocs() {
+  const el = document.getElementById("view-docs");
+  if (!el) return;
+  if (el.dataset.rendered) return;
+  el.dataset.rendered = "1";
+
+  el.innerHTML = `
+<style>
+  .doc-h1  { font-size:1.35rem; font-weight:600; color:#e2e8f0; margin-bottom:.5rem; }
+  .doc-h2  { font-size:1.05rem; font-weight:600; color:#c7d2fe; margin-bottom:.35rem; padding-top:.1rem; border-top:1px solid #252a3d; }
+  .doc-h3  { font-size:.875rem; font-weight:600; color:#a5b4fc; margin-bottom:.25rem; margin-top:.75rem; }
+  .doc-p   { font-size:.8rem; color:#94a3b8; line-height:1.65; }
+  .doc-ul  { font-size:.8rem; color:#94a3b8; line-height:1.7; padding-left:1.25rem; list-style:disc; }
+  .doc-tbl { width:100%; border-collapse:collapse; font-size:.78rem; }
+  .doc-tbl th { background:#1a1e2e; color:#8591b8; text-align:left; padding:.45rem .7rem; font-weight:500; border-bottom:1px solid #252a3d; }
+  .doc-tbl td { padding:.4rem .7rem; border-bottom:1px solid #1a1e2e; color:#94a3b8; vertical-align:top; }
+  .doc-tbl tr:hover td { background:#1a1e2e44; }
+  .doc-badge { display:inline-block; padding:.15rem .5rem; border-radius:.25rem; font-size:.7rem; font-weight:600; }
+  .badge-etf { background:#1e3a5f; color:#60a5fa; }
+  .badge-ppm { background:#134e4a; color:#34d399; }
+  .badge-mc  { background:#3b1f5e; color:#c084fc; }
+  .formula   { font-family:monospace; background:#13161f; border:1px solid #252a3d; border-radius:.35rem; padding:.6rem 1rem; font-size:.78rem; color:#a5b4fc; line-height:1.8; }
+  .kv-row    { display:flex; gap:.5rem; font-size:.78rem; margin:.2rem 0; }
+  .kv-key    { color:#5b6ef5; min-width:9rem; font-weight:500; }
+  .kv-val    { color:#94a3b8; }
+  .doc-card  { background:#1a1e2e; border:1px solid #252a3d; border-radius:.6rem; padding:1rem 1.25rem; }
+  .callout   { background:#1e2233; border-left:3px solid #5b6ef5; border-radius:0 .4rem .4rem 0; padding:.6rem 1rem; font-size:.78rem; color:#94a3b8; line-height:1.65; }
+  .callout-green { border-left-color:#10b981; }
+  .callout-amber { border-left-color:#f59e0b; }
+  .callout-cyan  { border-left-color:#06b6d4; }
+</style>
+
+<!-- ─ TOC ─────────────────────────────────────────────────────── -->
+<div class="doc-card space-y-1">
+  <p class="doc-h1">Strategidokumentation</p>
+  <p class="doc-p">Komplett teknisk beskrivning av samtliga backtestade strategier, beräkningsmetodik och resultat. Senast uppdaterad juni 2026.</p>
+  <div class="flex flex-wrap gap-3 mt-3 text-xs text-muted">
+    <a href="#sec-overview"    class="hover:text-slate-300 transition-colors">1. Översikt</a>
+    <span>·</span>
+    <a href="#sec-data"        class="hover:text-slate-300 transition-colors">2. Data &amp; priser</a>
+    <span>·</span>
+    <a href="#sec-etf"         class="hover:text-slate-300 transition-colors">3. ETF-strategier</a>
+    <span>·</span>
+    <a href="#sec-ppm"         class="hover:text-slate-300 transition-colors">4. PPM-strategi</a>
+    <span>·</span>
+    <a href="#sec-backtest"    class="hover:text-slate-300 transition-colors">5. Backtest-metodologi</a>
+    <span>·</span>
+    <a href="#sec-montecarlo"  class="hover:text-slate-300 transition-colors">6. Monte Carlo</a>
+    <span>·</span>
+    <a href="#sec-screening"   class="hover:text-slate-300 transition-colors">7. Screening</a>
+    <span>·</span>
+    <a href="#sec-findings"    class="hover:text-slate-300 transition-colors">8. Nyckelresultat</a>
+  </div>
+</div>
+
+<!-- ─ 1. OVERVIEW ─────────────────────────────────────────────── -->
+<div class="doc-card space-y-3" id="sec-overview">
+  <p class="doc-h2">1 · Översikt</p>
+  <p class="doc-p">Systemet backtestaro två parallella momentum-rotationsstrategier: en ETF-portfölj handlad på Xetra (via Nordnet) och en PPM-portfölj på Pensionsmyndighetens fondtorg. Båda bygger på samma grundprincip — <em>trend-following momentum</em> — men är anpassade till respektive marknads karakteristika.</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-2">
+    <div class="space-y-2">
+      <p class="doc-h3">ETF-portfölj</p>
+      <ul class="doc-ul">
+        <li>8 faktor-ETF:er (Xetra-listade, EUR) + 7 sektor-ETF:er</li>
+        <li>2 sleeves: faktor och sektor, vardera 50 %</li>
+        <li>Regimfilter: IWDA.L vs IBTS.L avgör risk-on/off</li>
+        <li>Handelskostnad: 15 bps per transaktion per sida</li>
+        <li>Rebalansering: sista handelsdagen varje månad</li>
+      </ul>
+    </div>
+    <div class="space-y-2">
+      <p class="doc-h3">PPM-portfölj</p>
+      <ul class="doc-ul">
+        <li>14 fondtorg-fonder (sektorer, regioner, räntefond)</li>
+        <li>Ingen sleeves — rankingbaserad rotation</li>
+        <li>Absolut momentum-filter: om momentum &lt; 0 → räntefond</li>
+        <li>Handelskostnad: 0 kr (PPM är gratis)</li>
+        <li>Rebalansering: sista handelsdagen varje månad</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout mt-2">
+    <strong class="text-slate-300">Varför två system?</strong> ETF-portföljen ger bredare exponering mot internationella faktor- och sektorpremiumer. PPM-portföljen är ett separat konto (ingen skatteeffekt vid byten) och drar nytta av AP7 Räntefonds faktiska avkastning som defensivt alternativ, till skillnad från ETF-systemets kontanta 0 % cash.
+  </div>
+</div>
+
+<!-- ─ 2. DATA ──────────────────────────────────────────────────── -->
+<div class="doc-card space-y-3" id="sec-data">
+  <p class="doc-h2">2 · Data &amp; priser</p>
+
+  <p class="doc-h3">ETF-priser</p>
+  <p class="doc-p">Hämtas dagligen från Yahoo Finance via <code>yfinance</code>-biblioteket. Prisserie = justerat stängningspris (adj. close) — justerat för split och utdelning automatiskt av yfinance. Varje ETF TER-justeras genom att multiplicera daglig avkastning med <code>(1 − TER/252)</code> per handelsdag, vilket ger en rättvisande kostnadsavdragen NAV-kurva.</p>
+
+  <div class="formula">
+NAV_justerad(t) = NAV(t-1) × (1 + r_rå(t)) × (1 − TER / 252)
+  </div>
+
+  <p class="doc-h3 mt-3">PPM-priser</p>
+  <p class="doc-p">Hämtas från Supabase (tabell <code>ppm_all_nav</code>). CSV-filen <code>ppm_all_nav.csv</code> innehåller ~676 000 rader med daglig NAV-data för alla PPM-fonder fr.o.m. år 2000. Eftersom fondtorget inte handlas varje dag forward-fylls NAV till full affärsdagskalender med pandas <code>ffill()</code> — senast kända kurs gäller till nästa handel.</p>
+
+  <p class="doc-h3 mt-3">Benchmark</p>
+  <ul class="doc-ul">
+    <li><strong class="text-slate-400">ETF:</strong> MSCI World (IWDA.L) med TER-justering</li>
+    <li><strong class="text-slate-400">PPM:</strong> AP7 Aktiefond (PPM-nr 581371) — globalt aktieindex med upp till 1,5× hävstång</li>
+  </ul>
+</div>
+
+<!-- ─ 3. ETF-STRATEGIER ────────────────────────────────────────── -->
+<div class="doc-card space-y-4" id="sec-etf">
+  <p class="doc-h2">3 · ETF-strategier</p>
+
+  <p class="doc-p">Alla ETF-strategier delar samma sleeve-struktur och regimfilter. Det som skiljer dem är <em>rankingmetrik</em> och hur många ETF:er som väljs per sleeve.</p>
+
+  <p class="doc-h3">3.1 Sleeve-struktur</p>
+  <p class="doc-p">Portföljen delas i två lika delar (50 % var):</p>
+  <ul class="doc-ul">
+    <li><strong class="text-slate-400">Faktor-sleeve:</strong> USA MOM · USA QUAL · USA VAL · USA SMALL · EUR MOM · EUR QUAL · EUR VAL · EUR SMALL</li>
+    <li><strong class="text-slate-400">Sektor-sleeve:</strong> IT (IITU.L) · Energy (QDVF.DE) · Healthcare (QDVG.DE) · Consumer Discretionary · Industrials · Consumer Staples · Materials</li>
+  </ul>
+  <p class="doc-p mt-1">Low-corr-varianten begränsar sektorsleeven till: Energy · Utilities · Consumer Staples · Communication Services · Healthcare — de historiskt minst korrelerade med den breda marknaden i nedgångsfaser.</p>
+
+  <p class="doc-h3">3.2 Regimfilter</p>
+  <p class="doc-p">Varje månad jämförs IWDA.L (MSCI World) med IBTS.L (kortränta) på 84 dagars horisont:</p>
+  <div class="formula">
+risk_on  = return(IWDA.L, 84d) &gt; return(IBTS.L, 84d)
+risk_off = annars → sleeve viktas 100 % till IBTS.L (kortränta)
+  </div>
+  <p class="doc-p mt-1">Filtret stänger ned aktieexponeringen automatiskt när den globala aktiemarknaden underpresterar kortränta de senaste 4 månaderna — ett enkelt men effektivt marknadsregimfilter.</p>
+
+  <p class="doc-h3">3.3 Rankingmetriker</p>
+  <table class="doc-tbl mt-1">
+    <thead>
+      <tr><th>Metrik</th><th>Formel</th><th>Strategier</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Raw return</strong></td>
+        <td><code>ret(t, t-84d) = P(t)/P(t-84) - 1</code></td>
+        <td>D1-raw, D2-raw, D1-low-corr, D2-low-corr</td>
+      </tr>
+      <tr>
+        <td><strong>Composite</strong></td>
+        <td><code>0.5 × ret(21d) + 0.5 × ret(84d)</code></td>
+        <td>D1-composite, D2-composite</td>
+      </tr>
+      <tr>
+        <td><strong>Accel momentum</strong></td>
+        <td><code>EMA(5, HL/2) → ROC(84d) + [ROC(0→15d) − ROC(−15→0d)]</code></td>
+        <td>D1-accel, D2-accel</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="doc-h3">3.4 Accel-signal i detalj</p>
+  <p class="doc-p">Accel-signalen är den mest sofistikerade och bäst presterande metriken. Steg-för-steg:</p>
+  <div class="formula">
+1. Mjukningsprisserie:  smooth(t) = EMA₅( (High(t) + Low(t)) / 2 )
+   (EMA med span=5 — halverar daglig brus utan stor eftersläpning)
+
+2. Råa ROC (Rate of Change):
+   roc(t) = smooth(t) / smooth(t − 84) − 1
+
+3. Accelerationssterm (momentum-förändring):
+   accel(t) = roc(t) − roc(t − 15)
+   Positiv accel → momentumet ökar (trend accelererar)
+   Negativ accel → momentumet försvagas (trend avtar)
+
+4. Sammansatt score:
+   score(t) = roc(t) + accel(t)
+   = roc(t) + roc(t) − roc(t−15)
+   = 2×roc(t) − roc(t−15)
+  </div>
+  <div class="callout callout-amber mt-2">
+    <strong class="text-slate-300">Intuition:</strong> En tillgång vars momentum <em>ökar</em> rankas dubbelt belönad. En tillgång med högt absolut momentum men avtagande trend straffas. Det gör att portföljen tenderar att rotera ur tillgångar som "toppar ut" och in i tillgångar som just börjar accelerera.
+  </div>
+
+  <p class="doc-h3">3.5 Parametersweep — ETF</p>
+  <p class="doc-p">Accel-parametrarna optimerades via 160-run sweep: 5 lookback-fönster (21/42/63/84/126d) × 4 accel-fönster (10/15/21/30d) × 4 EMA-span (3/5/8/10) × D1/D2. Vinnare: <code>ema=5, lb=84, win=15</code> med Sharpe 1.27. Composite-metriken är vinnare i ett separat 40-run DEL1-3 sweep.</p>
+
+  <p class="doc-h3">3.6 Sammanfattning ETF-strategier</p>
+  <table class="doc-tbl mt-1">
+    <thead>
+      <tr><th>Strategi</th><th>Metrik</th><th>Urval</th><th>Sektorer</th><th>CAGR*</th><th>Sharpe*</th><th>MaxDD*</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>D1-raw</td><td>Raw 84d</td><td>Top1+Top1</td><td>Full</td><td>~14%</td><td>~1.13</td><td>~-20%</td></tr>
+      <tr><td>D2-raw</td><td>Raw 84d</td><td>Top2+Top2</td><td>Full</td><td>~13%</td><td>~1.10</td><td>~-18%</td></tr>
+      <tr><td>D1-composite</td><td>50%×21d + 50%×84d</td><td>Top1+Top1</td><td>Full</td><td>~15%</td><td>~1.18</td><td>~-19%</td></tr>
+      <tr><td>D2-composite</td><td>Composite</td><td>Top2+Top2</td><td>Full</td><td>~14%</td><td>~1.17</td><td>~-17%</td></tr>
+      <tr><td>D1-accel</td><td>ROC+Accel</td><td>Top1+Top1</td><td>Full</td><td>~16%</td><td>~1.27</td><td>~-19%</td></tr>
+      <tr><td>D2-accel</td><td>ROC+Accel</td><td>Top2+Top2</td><td>Full</td><td>~15%</td><td>~1.24</td><td>~-17%</td></tr>
+      <tr><td>D1-low-corr</td><td>Raw 84d</td><td>Top1+Top1</td><td>Defensiv</td><td>~18%</td><td>~1.30</td><td>~-14%</td></tr>
+      <tr><td>D2-low-corr</td><td>Raw 84d</td><td>Top2+Top2</td><td>Defensiv</td><td>~16%</td><td>~1.26</td><td>~-13%</td></tr>
+    </tbody>
+  </table>
+  <p class="text-xs text-muted mt-1">* Approximativa värden — exakta siffror beror på vald tidsperiod. Se Dashboard för aktuella tal.</p>
+</div>
+
+<!-- ─ 4. PPM-STRATEGI ──────────────────────────────────────────── -->
+<div class="doc-card space-y-4" id="sec-ppm">
+  <p class="doc-h2">4 · PPM-strategi — top-3 + absolut momentum</p>
+  <span class="doc-badge badge-ppm">CAGR 23.7% · Sharpe 1.92 · MaxDD −7.8%</span>
+
+  <p class="doc-h3">4.1 Universum</p>
+  <table class="doc-tbl mt-1">
+    <thead><tr><th>PPM-nr</th><th>Namn</th><th>Roll</th></tr></thead>
+    <tbody>
+      <tr><td>581371</td><td>AP7 Aktiefond</td><td>Passiv global med hävstång — möjligt rotationsval OCH benchmark</td></tr>
+      <tr><td>283408</td><td>Teknikfond</td><td>Sektorfond — IT</td></tr>
+      <tr><td>644005</td><td>Hälsovårdsfond</td><td>Sektorfond — Healthcare</td></tr>
+      <tr><td>517748</td><td>Energifond</td><td>Sektorfond — Energy</td></tr>
+      <tr><td>481911</td><td>Råvaror/Mining</td><td>Sektorfond — Mining &amp; Materials</td></tr>
+      <tr><td>479550</td><td>Consumer Brands</td><td>Sektorfond — Consumer Staples/Brands</td></tr>
+      <tr><td>768556</td><td>US Value</td><td>Faktor — USA Värde</td></tr>
+      <tr><td>916354</td><td>US Small Cap</td><td>Faktor — USA Småbolag</td></tr>
+      <tr><td>456475</td><td>US Quality</td><td>Faktor — USA Kvalitet</td></tr>
+      <tr><td>163923</td><td>US Growth</td><td>Faktor — USA Tillväxt</td></tr>
+      <tr><td>182759</td><td>EUR Small Cap</td><td>Faktor — Europa Småbolag</td></tr>
+      <tr><td>538462</td><td>EUR Value</td><td>Faktor — Europa Värde</td></tr>
+      <tr><td>162099</td><td>Multifactor</td><td>Faktor — Global multifaktor</td></tr>
+      <tr><td>545541</td><td>AP7 Räntefond</td><td>Defensivt alternativ — väljs av abs-mom-filter</td></tr>
+    </tbody>
+  </table>
+
+  <p class="doc-h3">4.2 Accel-signal (PPM)</p>
+  <p class="doc-p">Identisk logik som ETF-systemets accel-signal med parametrar optimerade via sweep på rättad data (jun 2026):</p>
+  <div class="formula">
+1. Mjukningsserie:  smooth(t) = EMA₁₀( NAV(t) )
+   (EMA med span=10 på PPM:s dagliga NAV-kurs)
+
+2. ROC (4-månaders momentum):
+   roc(t) = smooth(t) / smooth(t − 84) − 1
+   (84 handelsdagar ≈ 4 månader — synkar med D1-accel)
+
+3. Acceleration (30-dagars momentum-förändring):
+   accel(t) = roc(t) − roc(t − 30)
+
+4. Accel-score:
+   score(t) = roc(t) + accel(t)
+  </div>
+
+  <p class="doc-h3">4.3 ETF-cash-synk</p>
+  <p class="doc-p">Varje månad kontrolleras om D1-accel (ETF-portföljens primärstrategi) är 100 % i cash via sitt regimfilter (IWDA.L vs IBTS.L). Om ja → PPM håller 100 % AP7 Räntefond den månaden, oavsett momentum-signal:</p>
+  <div class="formula">
+om D1-accel är i cash (månad m):
+    portfölj = 100 % AP7 Räntefond
+annars:
+    portfölj = top-3 fonder per accel-score, likviktade (33.3 % var)
+  </div>
+  <div class="callout callout-cyan mt-2">
+    <strong class="text-slate-300">Varför ETF-cash sync istället för absolut momentum?</strong> Sweepen visade att ETF-regimfiltret (IWDA vs IBTS, 84d) är ett starkare defensivt signal än PPM:s absoluta momentum-filter (raw ROC &lt; 0). ETF-cash sync gav Sharpe 1.92 vs 1.54 för standalone abs-mom — och synkar de två systemen så att de inte slår varandra i onödan.
+  </div>
+
+  <p class="doc-h3">4.4 Parametersweep — PPM</p>
+  <p class="doc-p">1 440 konfigurationer testades i <code>sweep_ppm_curated.py</code>, omkörd med rättad data juni 2026:</p>
+  <ul class="doc-ul">
+    <li>EMA-span: 3, 5, 10</li>
+    <li>ROC-fönster: 42d, 63d, 84d, 126d (2m, 3m, 4m, 6m)</li>
+    <li>Accel-fönster: 10d, 15d, 30d</li>
+    <li>Top-N: 1, 2, 3</li>
+    <li>DD-stop: inget, −15 %, −20 %</li>
+    <li>Absolut momentum: av/på</li>
+    <li>ETF-cash-synk: av/på</li>
+  </ul>
+  <p class="doc-p mt-1">Vinnarkonfiguration på Sharpe: <strong class="text-slate-400">EMA10 · ROC84d · accel30d · top3 · ETF-cash sync</strong>. CAGR 23.7 %, Sharpe 1.92, MaxDD −7.8 %. ETF-cash sync dominerar hela topp-20 — alla vinnarkonfigurationer har ETF-cash aktiverat.</p>
+
+  <p class="doc-h3">4.6 Varför PPM slår ETF-portföljen</p>
+  <ul class="doc-ul">
+    <li><strong class="text-slate-400">Sektorreinhet:</strong> PPM:s Mining-fond är 100 % mining. ETF-universumet har Materials-sektor som spädas ut av cement, glas m.m.</li>
+    <li><strong class="text-slate-400">Räntefond vs cash:</strong> AP7 Räntefond ger faktisk avkastning under defensiva perioder (obligationsränta), ETF-systemet är 100 % kontant (0 %).</li>
+    <li><strong class="text-slate-400">Periodseffekt:</strong> 2020–2026 är ett utmärkt momentum-klimat för sektorer (tech-boom, energichock, mining-supercykel).</li>
+    <li><strong class="text-slate-400">0 % handelskostnad:</strong> PPM har inga transaktionstillägg — ETF-systemet betalar 15 bps per sida per byte.</li>
+  </ul>
+</div>
+
+<!-- ─ 5. BACKTEST-METODOLOGI ──────────────────────────────────── -->
+<div class="doc-card space-y-3" id="sec-backtest">
+  <p class="doc-h2">5 · Backtest-metodologi</p>
+
+  <p class="doc-h3">5.1 NAV-beräkning</p>
+  <p class="doc-p">Backtestet simulerar en portfölj som startar med 100 000 kr. Varje månad:</p>
+  <div class="formula">
+1. Bestäm innehav (picks) per sista affärsdag i månaden
+2. Beräkna månadsavkastning baserat på <em>föregående månads</em> innehav:
+   ret = Σ ( P(dt) / P(dt_prev) − 1 )  ×  (1 / |holdings|)
+   (likviktad, ingen hävstång)
+3. Uppdatera NAV: NAV = NAV × (1 + ret)
+4. Uppdatera innehav till årets nya picks (byten sker i månadsslut)
+  </div>
+  <div class="callout mt-2">
+    <strong class="text-slate-300">Look-ahead bias:</strong> Signalen beräknas på stängningspris för sista handelsdagen i månaden. Samma pris används som "ingångspris" för nästa månad. Det finns ingen look-ahead bias — vi handlar alltid i nästa periods öppning i verkligheten, men skillnaden mot stängning är försumbar vid månadsrebalansering.
+  </div>
+
+  <p class="doc-h3">5.2 Nyckeltal</p>
+  <div class="formula">
+CAGR  = (NAV_slut / NAV_start) ^ (1 / n_år) − 1
+
+Sharpe = (mean(r_mån) × 12) / (std(r_mån) × √12)
+  (riskfri ränta = 0, annualisering via månadsdata)
+
+MaxDD = min( (NAV(t) − max(NAV[0:t])) / max(NAV[0:t]) )
+  (lägsta dradown från löpande toppkurs)
+  </div>
+
+  <p class="doc-h3">5.3 Rebalansering</p>
+  <p class="doc-p">Rebalansering sker alltid månadsvis om innehaven förändras. Om exakt samma fonder väljs nästa månad hålls positionerna och vikterna förblir oförändrade (eventuell drift korrigeras ej intra-månad). Empiriskt bekräftat: det finns noll skillnad i metrics om man alltid eller aldrig rebalanserar när innehav är identiska.</p>
+
+  <p class="doc-h3">5.4 Transaktionskostnader (ETF)</p>
+  <p class="doc-p">Varje köp/sälj belastas med 15 bps (0.15 %) per sida. Beräknas på den andel av portföljvärdet som omsätts månadsvis. PPM har inga transaktionskostnader.</p>
+
+  <p class="doc-h3">5.5 Warumup-period</p>
+  <p class="doc-p">Ingen signal kan beräknas förrän det finns tillräckligt med historik. PPM kräver minst <code>ROC_DAYS + 2 × ACCEL_WIN + 10 = 63 + 20 + 10 = 93 handelsdagar</code> per fond. ETF kräver ~134 handelsdagar. Backtestet börjar med det datum då tillräckliga data finns för alla ingående positioner.</p>
+</div>
+
+<!-- ─ 6. MONTE CARLO ───────────────────────────────────────────── -->
+<div class="doc-card space-y-3" id="sec-montecarlo">
+  <p class="doc-h2">6 · Monte Carlo-analys</p>
+  <span class="doc-badge badge-mc">10 000 bootstrap-simuleringar</span>
+
+  <p class="doc-h3">6.1 Metodik</p>
+  <p class="doc-p">Monte Carlo-analysen testar strategins robusthet mot urvalsbias ("har vi råkat backtesta på ett ovanligt bra marknadsklimat?"). Metodiken är bootstrap-resampling med återläggning:</p>
+  <div class="formula">
+För i = 1 … 10 000:
+  s = slumpmässigt urval (med återläggning) av N månadsavkastningar
+      (N = faktisk antal månader i backtestet)
+
+  CAGR_i  = prod(1 + s)^(12/N) − 1
+  Sharpe_i = mean(s) × 12 / (std(s) × √12)
+  MaxDD_i  = min drawdown för kumulativ prod(1 + s)
+
+Rapportera percentilfördelning: P5, P25, P50, P75, P95
+  </div>
+  <div class="callout callout-green mt-2">
+    <strong class="text-slate-300">Vad bootstrap-MC mäter:</strong> Variansen i utfall om vi dragit ett <em>annat</em> urval av månader ur samma fördelning. Det testar inte om marknadsregimerna är representativa — det är ett komplement till out-of-sample-test, inte en ersättning.
+  </div>
+
+  <p class="doc-h3">6.2 PPM-resultat (top-3 + abs-mom)</p>
+  <table class="doc-tbl mt-1">
+    <thead><tr><th>Metrik</th><th>P5</th><th>P25</th><th>P50</th><th>P75</th><th>P95</th></tr></thead>
+    <tbody>
+      <tr><td>CAGR</td><td>+11.5%</td><td>+20.2%</td><td>+26.5%</td><td>+33.1%</td><td>+42.8%</td></tr>
+      <tr><td>Sharpe</td><td>+0.71</td><td>+1.08</td><td>+1.35</td><td>+1.63</td><td>+2.05</td></tr>
+      <tr><td>MaxDD</td><td>−21.4%</td><td>−14.2%</td><td>−10.1%</td><td>−7.2%</td><td>−4.5%</td></tr>
+    </tbody>
+  </table>
+  <ul class="doc-ul mt-2">
+    <li><strong class="text-slate-400">P(slår AP7):</strong> 88.2 % av simuleringar</li>
+    <li><strong class="text-slate-400">P(CAGR &gt; 0):</strong> 99.4 %</li>
+    <li><strong class="text-slate-400">P(CAGR &gt; 15%):</strong> 83.7 %</li>
+    <li><strong class="text-slate-400">P(DD &lt; −15%):</strong> 13.1 % vs AP7:s 48 %</li>
+  </ul>
+</div>
+
+<!-- ─ 7. SCREENING ─────────────────────────────────────────────── -->
+<div class="doc-card space-y-3" id="sec-screening">
+  <p class="doc-h2">7 · Screening — kandidatövervakning</p>
+
+  <p class="doc-p">Screening-systemet tillåter löpande bevakning av ETF-kandidater som ännu inte ingår i portföljen. Syftet är att tidigt identifiera nya sektor- eller faktortrender som borde inkluderas i framtida portföljversioner.</p>
+
+  <p class="doc-h3">7.1 Beräkning</p>
+  <p class="doc-p">Kandidaterna utvärderas med exakt samma accel-signal som D1-accel (EMA5, ROC84d, accel15d). Signalen beräknas på senaste tillgängliga data och jämförs med portföljens nuvarande innehav:</p>
+  <div class="formula">
+portfolio_threshold = min(score(t) för ETF:er i nuvarande D1-accel-allokering)
+
+would_select = score(kandidat, t) &gt; portfolio_threshold
+  </div>
+
+  <p class="doc-h3">7.2 Tolkning</p>
+  <ul class="doc-ul">
+    <li><strong class="text-slate-400">Grön (Would Select):</strong> Kandidatens accel-score överstiger den svagaste nuvarande portföljmedlemmen — den skulle väljas om den vore i universumet.</li>
+    <li><strong class="text-slate-400">Grå (Watching):</strong> Kandidaten har positiv momentum men inte tillräcklig styrka att tränga ut nuvarande innehav.</li>
+    <li><strong class="text-slate-400">Rött:</strong> Negativ eller svag momentum — ej intressant just nu.</li>
+  </ul>
+
+  <p class="doc-h3">7.3 Nuvarande kandidater</p>
+  <p class="doc-p">Kandidatlistan lagras i <code>dashboard/backend/screening_config.json</code> och kan utökas via Screening-fliken. Initiala kandidater inkluderar: SEMI.DE (halvledare), AIAI.DE (AI), IQQH.DE (clean energy), DFND.SW (defense), NDIA.DE (Indien), XDJP.DE (Japan), BNKS.DE (europeiska banker), ISPY.DE (S&P 500 med collar), 2B7A.DE (aggregated bonds), QDVH.DE (utilities).</p>
+</div>
+
+<!-- ─ 8. NYCKELRESULTAT ────────────────────────────────────────── -->
+<div class="doc-card space-y-4" id="sec-findings">
+  <p class="doc-h2">8 · Nyckelresultat &amp; insikter</p>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+    <div class="space-y-3">
+      <p class="doc-h3">Full PPM-sweep (566 fonder) — förkastades</p>
+      <p class="doc-p">Initial approach med alla ~566 PPM-fonder och kategori-constraints producerade negativa CAGR trots korrekt implementering. Orsak: 2022 björnmarknad straffar momentumstrategier hårt på nisch- och exotiska fonder (guld, Latinamerika, Östeuropa). Lösning: kuraterat 14-fonds universum med sektor- och faktorfonder av hög kvalitet.</p>
+
+      <p class="doc-h3">Diversifiering hjälper inte alltid</p>
+      <p class="doc-p">Top-3 ger <em>sämre</em> MaxDD än top-1 utan absolut momentum-filter (korrelerade sektorer faller tillsammans). Det är abs-mom-filtret — inte diversifiering — som ger DD-skyddet. Top-3 ger bättre Sharpe via mer stabil avkastning, inte lägre risk.</p>
+    </div>
+    <div class="space-y-3">
+      <p class="doc-h3">EMA-smoothing vs råa priser</p>
+      <p class="doc-p">EMA(5) på PPM-fondernas NAV-kurs reducerar "brus" i signalen. Sweep bekräftade att EMA5 konsekvent ger bättre Sharpe än EMA3 (för reaktiv) eller EMA10 (för trög) för 63-dagars ROC. Accel-fönstret 10d är optimalt — snabbare än 15d men inte så snabbt att det skapar onödig handel.</p>
+
+      <p class="doc-h3">ETF-cash-synk: lägre DD, lägre CAGR</p>
+      <p class="doc-p">Att synka PPM med D1-acelels cash-signal ger MaxDD −9.4 % (bättre) men CAGR 23.9 % (lägre). Abs-mom-filtret allena ger MaxDD −12.0 % men CAGR 26.6 %. Val beror på individuell riskaptit. Kombination av båda (abs-mom + ETF-cash) ger ingen ytterligare förbättring utöver enbart ETF-cash.</p>
+    </div>
+  </div>
+
+  <div class="callout callout-green mt-3">
+    <strong class="text-slate-300">Sammanfattning:</strong> Den optimala PPM-konfigurationen (EMA10/ROC84/accel30/top3/ETF-cash sync) levererar Sharpe 1.92 och CAGR 23.7 % med MaxDD −7.8 % — väsentligt bättre än AP7 Aktiefond (Sharpe 1.23, CAGR 15.8 %, MaxDD −16.7 %) på alla tre nyckeltal. ETF-cash sync är den viktigaste enskilda innovationen: genom att dela regimfilter med D1-accel synkas de defensiva perioderna och risken minskar utan att avkastningen offras.
+  </div>
+</div>
+`;
+}

@@ -1,0 +1,94 @@
+{
+  "candidates": [
+    {
+      "ticker": "SEMI.DE",
+      "label": "Semiconductors",
+      "note": "Global semis, mer koncentrerat än IT"
+    },
+    {
+      "ticker": "AIAI.DE",
+      "label": "AI & Robotics",
+      "note": "Xtrackers AI & Big Data"
+    },
+    {
+      "ticker": "IQQH.DE",
+      "label": "Clean Energy",
+      "note": "iShares Global Clean Energy"
+    },
+    {
+      "ticker": "DFND.SW",
+      "label": "Defence",
+      "note": "iShares Defence & Aerospace"
+    },
+    {
+      "ticker": "NDIA.DE",
+      "label": "India",
+      "note": "iShares MSCI India"
+    },
+    {
+      "ticker": "XDJP.DE",
+      "label": "Japan",
+      "note": "Xtrackers MSCI Japan"
+    },
+    {
+      "ticker": "BNKS.DE",
+      "label": "Global Financials",
+      "note": "iShares MSCI World Financials"
+    },
+    {
+      "ticker": "ISPY.DE",
+      "label": "Cybersecurity",
+      "note": "L&G Cyber Security ETF"
+    },
+    {
+      "ticker": "2B7A.DE",
+      "label": "Utilities",
+      "note": "iShares S&P 500 Utilities"
+    },
+    {
+      "ticker": "QDVH.DE",
+      "label": "Comms Services",
+      "note": "iShares S&P 500 Comm. Services"
+    },
+    {
+      "ticker": "DFEN",
+      "label": "VanEck Defense",
+      "note": ""
+    },
+    {
+      "ticker": "XDWF",
+      "label": "Xtrackers World Financials",
+      "note": ""
+    },
+    {
+      "ticker": "SXRV",
+      "label": "iShares Nasdaq 100",
+      "note": ""
+    },
+    {
+      "ticker": "SXR7",
+      "label": "iShares Core MSCI EMU",
+      "note": ""
+    },
+    {
+      "ticker": "SXRT",
+      "label": "iShares EURO STOXX 50",
+      "note": ""
+    },
+    {
+      "ticker": "CEBL",
+      "label": "iShares MSCI EM Asia",
+      "note": ""
+    },
+    {
+      "ticker": "DBX8",
+      "label": "Xtrackers Korea",
+      "note": ""
+    },
+    {
+      "ticker": "XAIX",
+      "label": "Xtrackers AI and BigData",
+      "note": ""
+    }
+  ]
+}

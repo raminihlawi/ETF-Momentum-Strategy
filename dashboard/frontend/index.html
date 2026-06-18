@@ -18,7 +18,7 @@
             surface: '#13161f',
             panel:   '#1a1e2e',
             border:  '#252a3d',
-            muted:   '#4a5170',
+            muted:   '#8591b8',
             accent:  '#5b6ef5',
           }
         }
@@ -34,7 +34,7 @@
     .spinner { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .tab-active   { border-bottom: 2px solid #5b6ef5; color: #e2e8f0; }
-    .tab-inactive { border-bottom: 2px solid transparent; color: #4a5170; }
+    .tab-inactive { border-bottom: 2px solid transparent; color: #8591b8; }
   </style>
 </head>
 <body class="text-slate-300 font-sans min-h-screen">
@@ -49,6 +49,8 @@
     <button id="tab-dashboard" class="tab-active pb-1 transition-colors" onclick="switchTab('dashboard')">Dashboard</button>
     <button id="tab-settings"  class="tab-inactive pb-1 transition-colors" onclick="switchTab('settings')">Settings</button>
     <button id="tab-funds"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('funds')">Fondmappning</button>
+    <button id="tab-screen"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('screen')">Screening</button>
+    <button id="tab-docs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('docs')">Dokumentation</button>
   </nav>
 </header>
 
@@ -73,18 +75,23 @@
   </div>
 
   <!-- Signal cards — D1 row -->
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+  <div id="signal-row-d1" class="grid grid-cols-1 xl:grid-cols-2 gap-5">
     <div id="signal-d1"   class="bg-panel border border-border rounded-lg p-4"></div>
     <div id="signal-d1c"  class="bg-panel border border-border rounded-lg p-4"></div>
     <div id="signal-d1a"  class="bg-panel border border-border rounded-lg p-4"></div>
     <div id="signal-d1lc" class="bg-panel border border-border rounded-lg p-4"></div>
   </div>
   <!-- Signal cards — D2 row -->
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-5 mt-5">
+  <div id="signal-row-d2" class="grid grid-cols-1 xl:grid-cols-2 gap-5 mt-5">
     <div id="signal-d2"   class="bg-panel border border-border rounded-lg p-4"></div>
     <div id="signal-d2c"  class="bg-panel border border-border rounded-lg p-4"></div>
     <div id="signal-d2a"  class="bg-panel border border-border rounded-lg p-4"></div>
     <div id="signal-d2lc" class="bg-panel border border-border rounded-lg p-4"></div>
+  </div>
+
+  <!-- Signal card — PPM -->
+  <div id="signal-row-ppm" class="grid grid-cols-1 xl:grid-cols-2 gap-5 mt-5">
+    <div id="signal-ppm" class="bg-panel border border-border rounded-lg p-4"></div>
   </div>
 
   <!-- Stats panel -->
@@ -128,6 +135,30 @@
   </div>
   <div id="funds-table"></div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREENING VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-screen" class="hidden px-6 py-5 max-w-6xl space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300">ETF Kandidatscreening</h2>
+      <p class="text-xs text-muted mt-1">Kandidater screenas med samma accel-signal som D1-ACCEL. Grön = skulle väljas om den vore i portföljen idag.</p>
+    </div>
+    <div class="flex gap-2 items-end">
+      <input id="screen-ticker" type="text" placeholder="Ticker (t.ex. SEMI.DE)" class="bg-panel border border-border rounded px-2 py-1 text-slate-300 text-xs focus:outline-none focus:border-accent w-36"/>
+      <input id="screen-label"  type="text" placeholder="Label" class="bg-panel border border-border rounded px-2 py-1 text-slate-300 text-xs focus:outline-none focus:border-accent w-32"/>
+      <input id="screen-note"   type="text" placeholder="Not (valfri)" class="bg-panel border border-border rounded px-2 py-1 text-slate-300 text-xs focus:outline-none focus:border-accent w-40"/>
+      <button onclick="addScreenCandidate()" class="px-3 py-1 bg-accent hover:bg-indigo-500 text-white text-xs font-medium rounded transition-colors">+ Lägg till</button>
+    </div>
+  </div>
+  <div id="screen-table"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DOCS VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-docs" class="hidden px-6 py-5 max-w-5xl space-y-8"></div>
 
 <!-- ── Strategy Spec Modal ─────────────────────────────────────── -->
 <div id="spec-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4"

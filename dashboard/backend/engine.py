@@ -18,13 +18,31 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+# PPM engine (optional — skipped gracefully if unavailable)
+try:
+    from ppm_engine import run_ppm as _run_ppm
+    _PPM_AVAILABLE = True
+except ImportError:
+    _PPM_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-BASE_DIR    = Path(__file__).parent
-CONFIG_PATH = BASE_DIR / "config.json"
-CACHE_PATH  = BASE_DIR / "_price_cache.pkl"
-DATA_PATH   = BASE_DIR.parent / "frontend" / "static" / "data.json"
+import os as _os
+BASE_DIR          = Path(__file__).parent
+_DATA_DIR         = Path(_os.getenv("DATA_DIR", str(BASE_DIR.parent.parent)))
+CONFIG_PATH       = _DATA_DIR / "config.json"
+if not CONFIG_PATH.exists():
+    CONFIG_PATH   = BASE_DIR / "config.json"   # dev fallback
+CACHE_PATH        = BASE_DIR / "_price_cache.pkl"
+DATA_PATH         = _DATA_DIR / "data.json"
+if not DATA_PATH.parent.exists():
+    DATA_PATH     = BASE_DIR.parent / "frontend" / "static" / "data.json"
+SCREENING_CONFIG  = _DATA_DIR / "screening_config.json"
+if not SCREENING_CONFIG.exists():
+    SCREENING_CONFIG = BASE_DIR / "screening_config.json"
+PPM_DATA_FILE     = BASE_DIR.parent.parent / "ppm_all_nav.csv"
+DB_PATH           = _DATA_DIR / "dashboard.db"
 
 # ── Strategy parameters ────────────────────────────────────────────
 SEL_LB   = 84        # 4-month selection lookback (trading days)
@@ -48,9 +66,9 @@ EMA_SPAN       = 5    # smoothing span for median price
 
 # ── Low-correlation basket ─────────────────────────────────────────
 LOW_CORR_EXTRA = {
-    "UTILITIES": {"ticker": "QDVH.DE", "nordnet_name": "iShares S&P 500 Utilities Sector UCITS ETF",          "isin": "IE00B4KBBD01", "ter_pct": 0.15},
-    "COMMS":     {"ticker": "XLC",     "nordnet_name": "SPDR S&P 500 Communication Services Select Sector ETF", "isin": "US78468R6633", "ter_pct": 0.10},
-    "GOLD":      {"ticker": "GLD",     "nordnet_name": "SPDR Gold Shares",                                      "isin": "US78463V1070", "ter_pct": 0.40},
+    "UTILITIES": {"ticker": "2B7A.DE", "nordnet_name": "iShares S&P 500 Utilities Sector UCITS ETF",        "isin": "IE00B3WJKQ31", "ter_pct": 0.15},
+    "COMMS":     {"ticker": "QDVH.DE", "nordnet_name": "iShares S&P 500 Communication Services UCITS ETF",  "isin": "IE00B4KBBD01", "ter_pct": 0.15},
+    "GOLD":      {"ticker": "GLD",     "nordnet_name": "SPDR Gold Shares",                                   "isin": "US78463V1070", "ter_pct": 0.40},
 }
 LOW_CORR_SECTOR_KEEP = {"ENERGY", "HEALTHCARE", "CONS STAP"}  # kept from main config
 
@@ -471,14 +489,37 @@ def run(cfg: dict = None, use_cache: bool = False):
     for v in LOW_CORR_EXTRA.values():
         ter_map.setdefault(v["ticker"], v["ter_pct"])
 
+    # Screening candidates: load config and add tickers to download list
+    screening_cfg = {}
+    screening_tickers = []
+    if SCREENING_CONFIG.exists():
+        try:
+            screening_cfg = json.loads(SCREENING_CONFIG.read_text())
+            screening_tickers = [c["ticker"] for c in screening_cfg.get("candidates", [])]
+        except Exception as e:
+            log.warning(f"Could not load screening_config.json: {e}")
+
     strategy_tickers = ([t for _, t in factor_t] + [t for _, t in sector_t]
                         + [regime_t, regime_compare_t]
                         + ([cash_t] if cash_t != "CASH" else [])
                         + lc_tickers)
     bench_tickers  = list(set(BENCHMARKS.values()))
-    all_dl_tickers = list(dict.fromkeys(strategy_tickers + bench_tickers))
+    all_dl_tickers = list(dict.fromkeys(strategy_tickers + bench_tickers + screening_tickers))
 
-    prices_dict = fetch_prices(all_dl_tickers, use_cache=use_cache)
+    # Prefer SQLite DB; fall back to yfinance download
+    try:
+        from db import load_etf_prices
+        prices_dict = load_etf_prices(all_dl_tickers, path=DB_PATH)
+        if prices_dict and prices_dict.get("close") is not None and not prices_dict["close"].empty:
+            log.info("Loaded prices from SQLite DB (%d tickers × %d days)",
+                     prices_dict["close"].shape[1], len(prices_dict["close"]))
+        else:
+            log.info("DB empty — falling back to yfinance download")
+            prices_dict = fetch_prices(all_dl_tickers, use_cache=use_cache)
+    except Exception as _db_err:
+        log.warning("DB load failed (%s) — falling back to yfinance", _db_err)
+        prices_dict = fetch_prices(all_dl_tickers, use_cache=use_cache)
+
     prices_raw  = prices_dict["close"]
     prices_high = prices_dict.get("high", prices_raw)
     prices_low  = prices_dict.get("low",  prices_raw)
@@ -547,6 +588,97 @@ def run(cfg: dict = None, use_cache: bool = False):
         "benchmarks":      benchmarks_out,
         "config_snapshot": cfg,
     }
+
+    # ── PPM strategy ──────────────────────────────────────────────────
+    if _PPM_AVAILABLE:
+        try:
+            # Extract ETF-cash months directly from the in-memory allocation
+            d1a_alloc = out["strategies"]["d1_accel"]["allocation"]
+            cash_idx  = d1a_alloc["tickers"].index("CASH")
+            from pandas import Timestamp
+            etf_cash_months = {
+                (Timestamp(dt).year, Timestamp(dt).month)
+                for dt, w in zip(d1a_alloc["dates"], d1a_alloc["weights"])
+                if w[cash_idx] > 0
+            }
+            ppm_result = _run_ppm(PPM_DATA_FILE, etf_cash_months, db_path=DB_PATH)
+            if ppm_result is not None:
+                out["strategies"]["ppm_top3"] = ppm_result
+            else:
+                log.warning("PPM engine returned None — skipping ppm_top3")
+        except Exception as e:
+            log.warning(f"PPM engine failed: {e}")
+    else:
+        log.warning("ppm_engine module not available — skipping ppm_top3")
+
+    # ── Screening ─────────────────────────────────────────────────────
+    if screening_cfg and screening_tickers:
+        try:
+            # Build pos_map for the full price index
+            all_idx_sm = prices_smooth.index
+            pos_map_sm = {d: i for i, d in enumerate(all_idx_sm)}
+            last_date  = all_idx_sm[-1]
+
+            # Current D1-accel holdings: find min score (portfolio_threshold)
+            last_alloc = al1a[-1] if al1a else None
+            portfolio_threshold = 0.0
+            if last_alloc:
+                held_tickers = list(last_alloc["holdings"].keys())
+                held_scores  = [
+                    score_accel(t, last_date, prices_smooth, pos_map_sm)
+                    for t in held_tickers if t != "CASH"
+                ]
+                valid_scores = [s for s in held_scores if not np.isnan(s)]
+                if valid_scores:
+                    portfolio_threshold = float(min(valid_scores))
+
+            candidates_out = []
+            for cand in screening_cfg.get("candidates", []):
+                ticker = cand["ticker"]
+                label  = cand.get("label", ticker)
+                note   = cand.get("note", "")
+                try:
+                    sc  = score_accel(ticker, last_date, prices_smooth, pos_map_sm)
+                    # Raw ROC63 from smooth prices
+                    pos = pos_map_sm.get(last_date, -1)
+                    roc = np.nan
+                    if pos >= 63 and ticker in prices_smooth.columns:
+                        p0 = float(prices_smooth.iloc[pos - 63][ticker])
+                        p1 = float(prices_smooth.iloc[pos][ticker])
+                        if p0 > 0:
+                            roc = p1 / p0 - 1
+
+                    if np.isnan(sc):
+                        candidates_out.append({
+                            "ticker": ticker, "label": label, "note": note,
+                            "score": None, "roc_63d": None,
+                            "would_select": False,
+                            "error": "Insufficient data or ticker not downloaded",
+                        })
+                    else:
+                        would_select = (sc > portfolio_threshold) and (not np.isnan(roc) and roc > 0)
+                        candidates_out.append({
+                            "ticker": ticker, "label": label, "note": note,
+                            "score":       round(float(sc),  6),
+                            "roc_63d":     round(float(roc), 6) if not np.isnan(roc) else None,
+                            "would_select": bool(would_select),
+                            "error":        None,
+                        })
+                except Exception as e:
+                    candidates_out.append({
+                        "ticker": ticker, "label": label, "note": note,
+                        "score": None, "roc_63d": None,
+                        "would_select": False,
+                        "error": str(e),
+                    })
+
+            out["screening"] = {
+                "computed_at":         datetime.now(timezone.utc).isoformat(),
+                "portfolio_threshold": round(portfolio_threshold, 6),
+                "candidates":          candidates_out,
+            }
+        except Exception as e:
+            log.warning(f"Screening computation failed: {e}")
 
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(DATA_PATH, "w") as f:

@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 *.pkl
-stockholm_ohlc.sqlite3
+*.sqlite3
 *.pdf
 files/
 files.zip
@@ -10,4 +10,14 @@ etf_sweep_results/
 marketfighter_sweep_results/
 marketfighter_sweep2_results/
 mg99_vs_fitp_results/
-dashboard/backend/_price_cache.pkl
+
+# Runtime data — lives in DATA_DIR on server, never in repo
+dashboard.db
+data.json
+ppm_all_nav.csv
+ppm_all_nav.csv.bak*
+ppm_nav.csv
+dashboard/frontend/static/data.json
+
+# Secrets
+.env
