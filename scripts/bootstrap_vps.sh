@@ -38,29 +38,31 @@ if [ -z "$REPO_URL" ]; then
   exit 1
 fi
 
+DEPLOY_DIR="/home/ubuntu/etf-ppm-stocks"
+
 echo "==> Cloning $REPO_URL on VPS"
 ssh "$SSH_TARGET" bash << REMOTE
 set -e
-if [ -d /opt/etf-dashboard/.git ]; then
+if [ -d "$DEPLOY_DIR/.git" ]; then
   echo "  Repo already exists — pulling latest"
-  cd /opt/etf-dashboard && git pull origin main
+  cd "$DEPLOY_DIR" && git pull origin main
 else
-  git clone "$REPO_URL" /opt/etf-dashboard
+  git clone "$REPO_URL" "$DEPLOY_DIR"
 fi
-mkdir -p /opt/etf-dashboard/data
+mkdir -p "$DEPLOY_DIR/data"
 REMOTE
 
 # ── Step 2: Upload the database ────────────────────────────────────
-echo "==> Uploading dashboard.db ($DB_SIZE) → VPS /opt/etf-dashboard/data/"
+echo "==> Uploading dashboard.db ($DB_SIZE) → VPS $DEPLOY_DIR/data/"
 echo "    (this may take a moment depending on your connection)"
-scp "$LOCAL_DB" "$SSH_TARGET:/opt/etf-dashboard/data/dashboard.db"
+scp "$LOCAL_DB" "$SSH_TARGET:$DEPLOY_DIR/data/dashboard.db"
 echo "    ✓ Uploaded"
 
 # ── Step 3: Run setup.sh on VPS ────────────────────────────────────
 echo "==> Running setup.sh on VPS"
 ssh -t "$SSH_TARGET" bash << REMOTE
 set -e
-cd /opt/etf-dashboard
+cd "$DEPLOY_DIR"
 bash dashboard/deploy/setup.sh "$DOMAIN"
 REMOTE
 

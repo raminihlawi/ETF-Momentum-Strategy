@@ -19,7 +19,7 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            DEPLOY_DIR="/opt/etf-dashboard"
+            DEPLOY_DIR="/home/ubuntu/etf-ppm-stocks"
             VENV="$DEPLOY_DIR/venv"
             DATA_DIR="$DEPLOY_DIR/data"
 

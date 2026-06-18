@@ -14,38 +14,27 @@
 set -euo pipefail
 
 DOMAIN="${1:-}"
-DEPLOY_DIR="/opt/etf-dashboard"
-APP_USER="etf"
+DEPLOY_DIR="/home/ubuntu/etf-ppm-stocks"
+APP_USER="ubuntu"
 VENV="$DEPLOY_DIR/venv"
 SERVICE="etf-dashboard"
-REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # ── 1. System packages ─────────────────────────────────────────────
 echo "==> Installing system packages"
 apt-get update -qq
 apt-get install -y -qq python3 python3-venv python3-pip rsync
 
-# ── 2. Deploy user ─────────────────────────────────────────────────
-echo "==> Creating deploy user '$APP_USER'"
-id "$APP_USER" &>/dev/null || useradd -r -m -s /bin/bash "$APP_USER"
+# ── 2. Sudoers for service restart ────────────────────────────────
 SUDOERS_LINE="$APP_USER ALL=(root) NOPASSWD: /bin/systemctl restart $SERVICE"
 grep -qF "$SUDOERS_LINE" /etc/sudoers 2>/dev/null || echo "$SUDOERS_LINE" >> /etc/sudoers
 
-# ── 3. Copy files ──────────────────────────────────────────────────
-echo "==> Copying app to $DEPLOY_DIR"
-mkdir -p "$DEPLOY_DIR"
-rsync -a --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' \
-      --exclude 'venv' --exclude '*.pkl' \
-      "$REPO_DIR/" "$DEPLOY_DIR/"
-chown -R "$APP_USER:$APP_USER" "$DEPLOY_DIR"
-
-# ── 4. Python venv ─────────────────────────────────────────────────
+# ── 3. Python venv ─────────────────────────────────────────────────
 echo "==> Creating Python virtualenv"
 sudo -u "$APP_USER" python3 -m venv "$VENV"
 sudo -u "$APP_USER" "$VENV/bin/pip" install -q --upgrade pip
 sudo -u "$APP_USER" "$VENV/bin/pip" install -q -r "$DEPLOY_DIR/dashboard/backend/requirements.txt"
 
-# ── 5. Data directory + config seed ────────────────────────────────
+# ── 4. Data directory + config seed ────────────────────────────────
 echo "==> Setting up data directory"
 DATA_DIR="$DEPLOY_DIR/data"
 mkdir -p "$DATA_DIR"
