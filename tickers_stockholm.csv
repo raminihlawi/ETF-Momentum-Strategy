@@ -1,0 +1,304 @@
+ticker,name,segment
+ABB.ST,ABB Ltd,Large
+ALFA.ST,Alfa Laval,Large
+ASSA-B.ST,Assa Abloy,Large
+ATCO-A.ST,Atlas Copco A,Large
+ATCO-B.ST,Atlas Copco B,Large
+AZN.ST,AstraZeneca,Large
+BEIJ-B.ST,Beijer Ref,Large
+BOL.ST,Boliden,Large
+ELUX-B.ST,Electrolux B,Large
+EPI-A.ST,Epiroc A,Large
+EPI-B.ST,Epiroc B,Large
+ERIC-B.ST,Ericsson B,Large
+ESSITY-B.ST,Essity B,Large
+EVO.ST,Evolution,Large
+GETI-B.ST,Getinge B,Large
+HEXA-B.ST,Hexagon B,Large
+HM-B.ST,H&M B,Large
+HOLM-B.ST,Holmen B,Large
+HUSQ-B.ST,Husqvarna B,Large
+INDU-C.ST,Industrivarden C,Large
+INVE-B.ST,Investor B,Large
+KINV-B.ST,Kinnevik B,Large
+LATO-B.ST,Latour B,Large
+LIFCO-B.ST,Lifco B,Large
+LUND-B.ST,Lundbergforetagen B,Large
+NDA-SE.ST,Nordea Bank,Large
+NIBE-B.ST,NIBE Industrier B,Large
+SAAB-B.ST,Saab B,Large
+SAGA-B.ST,Sagax B,Large
+SAND.ST,Sandvik,Large
+SBB-B.ST,SBB B,Large
+SCA-B.ST,SCA B,Large
+SEB-A.ST,SEB A,Large
+SECU-B.ST,Securitas B,Large
+SHB-A.ST,Handelsbanken A,Large
+SINCH.ST,Sinch,Large
+SKA-B.ST,Skanska B,Large
+SKF-B.ST,SKF B,Large
+SSAB-A.ST,SSAB A,Large
+SSAB-B.ST,SSAB B,Large
+SWED-A.ST,Swedbank A,Large
+TEL2-B.ST,Tele2 B,Large
+TELIA.ST,Telia Company,Large
+THULE.ST,Thule Group,Large
+TREL-B.ST,Trelleborg B,Large
+VOLV-A.ST,Volvo A,Large
+VOLV-B.ST,Volvo B,Large
+WALL-B.ST,Wallenstam B,Large
+ADDT-B.ST,Addtech B,Mid
+BALD-B.ST,Fastighets Balder B,Mid
+BETS-B.ST,Betsson B,Mid
+BILL.ST,Billerud,Mid
+BUFAB.ST,Bufab,Mid
+CLAS-B.ST,Clas Ohlson B,Mid
+DUNI.ST,Duni,Mid
+FABG.ST,Fabege,Mid
+FPAR-A.ST,Fastpartner A,Mid
+GRNG.ST,Granges,Mid
+HOFI.ST,Hoist Finance,Mid
+HUSQ-A.ST,Husqvarna A,Mid
+INDT.ST,Indutrade,Mid
+INTRUM.ST,Intrum,Mid
+JM.ST,JM,Mid
+LAGR-B.ST,Lagercrantz B,Mid
+LOOMIS.ST,Loomis,Mid
+MEKO.ST,Mekonomen,Mid
+MIPS.ST,MIPS,Mid
+MTRS.ST,Munters,Mid
+MYCR.ST,Mycronic,Mid
+NCC-B.ST,NCC B,Mid
+NOBI.ST,Nobina,Mid
+NP3.ST,NP3 Fastigheter,Mid
+PEAB-B.ST,Peab B,Mid
+PNDX-B.ST,Pandox B,Mid
+RATO-B.ST,Ratos B,Mid
+SECT-B.ST,Sectra B,Mid
+SVOL-B.ST,Svolder B,Mid
+SWEC-B.ST,Sweco B,Mid
+SYSR.ST,Systemair,Mid
+VITR.ST,Vitrolife,Mid
+WIHL.ST,Wihlborgs Fastigheter,Mid
+XANO-B.ST,Xano Industri B,Mid
+BIOG-B.ST,BioGaia B,Small
+BONAV-B.ST,Bonava B,Small
+ENEA.ST,Enea,Small
+EOLU-B.ST,Eolus Vind B,Small
+FING-B.ST,Fingerprint Cards B,Small
+G5EN.ST,G5 Entertainment,Small
+HANZA.ST,Hanza,Small
+KAMBI.ST,Kambi Group,Small
+MTG-B.ST,Modern Times Group B,Small
+NETI-B.ST,Net Insight B,Small
+NOTE.ST,Note,Small
+OEM-B.ST,OEM International B,Small
+RAY-B.ST,RaySearch Laboratories B,Small
+RVRC.ST,RVRC Holding,Small
+SIVE.ST,Sivers Semiconductors,Small
+TOBII.ST,Tobii,Small
+VBG-B.ST,VBG Group,Small
+KINV-A.ST,Kinnevik A,Large
+OVZON.ST,Ovzon,Mid
+CRAD-B.ST,C-Rad B,Small
+COOR.ST,Coor Service Management,Mid
+EG7.ST,Enad Global 7,Small
+TRIAN-B.ST,Fastighets Trianon B,Mid
+SKF-A.ST,SKF A,Large
+RATO-A.ST,Ratos A,Mid
+SLEEP.ST,Sleep Cycle,Small
+MCOV-B.ST,Medicover B,Large
+AXFO.ST,Axfood,Large
+VIVE.ST,Vivesto,Small
+PCELL.ST,Powercell Sweden,Mid
+SVED-B.ST,Svedbergs i Dalstorp B,Mid
+CEVI.ST,CellaVision,Mid
+GPG.ST,Genova Property Group,Mid
+SVEAF.ST,Sveafastigheter,Mid
+NEOBO.ST,Neobo Fastigheter,Mid
+HACK.ST,Hacksaw,Large
+QLIRO.ST,Qliro Group,Small
+BRIN-B.ST,Brinova Fastigheter B,Mid
+TRAC-B.ST,Traction B,Mid
+ELTEL.ST,Eltel,Small
+BACTI-B.ST,Bactiguard Holding B,Small
+HUFV-A.ST,Hufvudstaden A,Large
+EGTX.ST,Egetis Therapeutics,Mid
+CATE.ST,Catena,Large
+HEBA-B.ST,Heba Fastighets B,Mid
+PLAZ-B.ST,Platzer Fastigheter Holding,Mid
+PROF-B.ST,ProfilGruppen B,Small
+ATRLJ-B.ST,Atrium Ljungberg B,Large
+BORG.ST,Bjorn Borg,Small
+PREC.ST,Precise Biometrics,Small
+NETEL.ST,Netel Holding B,Small
+ONCO.ST,Oncopeptides,Small
+PRIC-B.ST,Pricer B,Small
+LIAB.ST,Lindab International,Large
+ACRI-B.ST,Acrinova B,Small
+BHG.ST,BHG Group,Mid
+NOLA-B.ST,Nolato B,Large
+BEIA-B.ST,Beijer Alma B,Large
+NORB-B.ST,Nordisk Bergteknik B,Small
+SOBI.ST,Swedish Orphan Biovitrum,Large
+BRAV.ST,Bravida Holding,Large
+STAR-B.ST,Starbreeze B,Small
+CCC.ST,Cavotec,Mid
+XSPRAY.ST,XSpray Pharma,Small
+NCC-A.ST,NCC A,Large
+FERRO.ST,Ferronordic,Small
+QLINEA.ST,Q-linea,Small
+SEB-C.ST,SEB C,Large
+MEAB-B.ST,Malmbergs Elektriska B,Small
+BULTEN.ST,Bulten,Small
+LOGI-B.ST,Logistea B,Mid
+DEDI.ST,Dedicare B,Small
+SCA-A.ST,SCA A,Large
+CTT.ST,CTT Systems,Mid
+CARA.ST,Carasent,Small
+BOOZT.ST,Boozt,Mid
+EPIS-B.ST,Episurf Medical B,Small
+PIERCE.ST,Pierce Group AB,Small
+CIBUS.ST,Cibus Nordic Real Estate,Mid
+HTRO.ST,Hexatronic Group,Mid
+PREV-B.ST,Prevas B,Small
+K2A-B.ST,K2A Knaust & Andersson Fastigheter D,Small
+ACTI.ST,Active Biotech,Small
+MCAP.ST,MedCap,Mid
+ANNE-B.ST,Annehem Fastigheter B,Small
+MOB.ST,Moberg Pharma,Small
+ELUX-A.ST,Electrolux A,Large
+SVIK.ST,Studsvik,Small
+RROS.ST,Rottneros,Small
+BERG-B.ST,Bergman & Beving B,Mid
+VNV.ST,VNV Global,Mid
+SDIP-B.ST,Sdiptech B,Mid
+ITAB.ST,ITAB Shop Concept B,Mid
+EWRK.ST,eWork Group,Mid
+MSON-B.ST,Midsona B,Small
+MMGR-B.ST,Momentum Group B,Mid
+RUSTA.ST,Rusta,Mid
+SEZI.ST,Senzime,Small
+HUMBLE.ST,Humble Group,Mid
+BONG.ST,Bong,Small
+MOMENT.ST,Moment Group,Small
+AMBEA.ST,Ambea,Mid
+TRUE-B.ST,Truecaller B,Large
+ENRO.ST,Eniro,Small
+ACAD.ST,AcadeMedia,Mid
+BINV.ST,BioInvent International,Mid
+ALIV-SDB.ST,Autoliv SDB,Large
+LAMM-B.ST,Lammhults Design Group B,Small
+XBRANE.ST,Xbrane Biopharma,Small
+CANTA.ST,Cantargia,Small
+GARO.ST,Garo B,Small
+INSTAL.ST,Instalco,Mid
+BOUL.ST,Boule Diagnostics,Small
+BONEX.ST,BoneSupport,Large
+CTM.ST,Catena Media,Small
+WBGR-B.ST,Wastbygg Gruppen B,Small
+SAGA-D.ST,Sagax D,Large
+TRANS.ST,Transtema Group,Small
+NMAN.ST,Nederman Holding,Mid
+REJL-B.ST,Rejlers B,Mid
+VOLO.ST,Volati B,Mid
+DURC-B.ST,Duroc B,Small
+SOF-B.ST,Softronic B,Small
+CINT.ST,Cint Group,Mid
+NOBA.ST,NOBA Bank Group,Large
+SAVE.ST,Nordnet,Large
+HPOL-B.ST,HEXPOL B,Large
+CTEK.ST,CTEK,Small
+SCST.ST,Scandi Standard,Mid
+BTS-B.ST,BTS Group B,Mid
+KAR.ST,Karnov Group,Mid
+BIOA-B.ST,BioArctic B,Large
+VIMIAN.ST,Vimian Group,Large
+ESSITY-A.ST,Essity A,Large
+SENS.ST,Sensys Gatso Group,Small
+WISE.ST,Wise Group,Small
+DOM.ST,Dometic Group,Large
+MSAB-B.ST,Micro Systemation B,Small
+DIOS.ST,Dios Fastigheter,Mid
+VICO.ST,Vicore Pharma Holding,Mid
+AAK.ST,AAK,Large
+PACT.ST,Proact IT Group,Mid
+BETCO.ST,Better Collective,Mid
+NORION.ST,Norion Bank,Mid
+AQ.ST,AQ Group,Large
+CAST.ST,Castellum,Large
+STAR-A.ST,Starbreeze A,Small
+BILI-A.ST,Bilia A,Large
+STIL.ST,Stillfront Group,Mid
+CAT-B.ST,Catella B,Mid
+ARJO-B.ST,Arjo B,Mid
+HOLM-A.ST,Holmen A,Large
+ANOD-B.ST,AddNode B,Large
+EPRO-B.ST,Electrolux Professional B,Large
+GREEN.ST,Green Landscaping Group B,Mid
+EMBRAC-B.ST,Embracer Group B,Large
+NIL-B.ST,Nilorngruppen B,Small
+STE-R.ST,Stora Enso R,Large
+MANG.ST,Mangold B,Small
+DUST.ST,Dustin Group,Mid
+XVIVO.ST,Xvivo Perfusion,Mid
+EPEN.ST,Ependion,Mid
+ARP.ST,Arctic Paper,Mid
+KABE-B.ST,Kabe B,Mid
+INWI.ST,Inwido,Mid
+SINT.ST,SinterCast,Small
+STWK.ST,Stockwik Forvaltning,Small
+MILDEF.ST,MilDef Group,Mid
+B3.ST,B3 Consulting Group,Small
+CAT-A.ST,Catella A,Mid
+STE-A.ST,Stora Enso A,Large
+FG.ST,Fasadgruppen Group,Mid
+SWEC-A.ST,Sweco A,Large
+ACAST.ST,Acast,Mid
+SYNSAM.ST,Synsam,Mid
+SEAF.ST,Seafire,Small
+HUM.ST,Humana,Mid
+HEM.ST,Hemnet Group,Large
+NCAB.ST,NCAB Group,Mid
+ATT.ST,Attendo,Mid
+KNOW.ST,Knowit,Mid
+AZA.ST,Avanza Bank,Large
+STEF-B.ST,Stendorren Fastigheter,Mid
+BEGR.ST,BE Group,Small
+ORX.ST,Orexo,Small
+SEDANA.ST,Sedana Medical,Small
+ALIG.ST,Alimak Group,Large
+SYNACT.ST,SynAct Pharma,Small
+ALLEI.ST,Alleima,Large
+BALCO.ST,Balco Group,Small
+MSON-A.ST,Midsona A,Small
+AFRY.ST,Afry B,Large
+ELAN-B.ST,Elanders B,Mid
+ENITY.ST,Enity Holding,Mid
+VOLCAR-B.ST,Volvo Car B,Large
+INDU-A.ST,Industrivarden A,Large
+ARPL.ST,Arla Plast,Small
+EQT.ST,EQT,Large
+EAST.ST,Eastnine,Mid
+HMS.ST,HMS Networks,Large
+BONAV-A.ST,Bonava A,Mid
+TIETOS.ST,TietoEVRY,Large
+BMAX.ST,Byggmax Group,Mid
+HNSA.ST,Hansa Biopharma,Mid
+KFAST-B.ST,K-Fastigheter D,Mid
+NELLY.ST,Nelly Group,Mid
+CLA-B.ST,Cloetta B,Mid
+FAG.ST,Fagerhult,Mid
+ORES.ST,Investment Oresund,Mid
+VESTUM.ST,Vestum,Mid
+ALLIGO-B.ST,Alligo B,Mid
+SFAST.ST,Stenhus Fastigheter i Norden,Mid
+KLARA-B.ST,KlaraBo Sverige,Mid
+DYVOX.ST,Tobii Dynavox,Mid
+EMIL-B.ST,Fastighetsbolaget Emilshus,Mid
+SANION.ST,Saniona,Small
+FMM-B.ST,FM Mattsson,Mid
+NIVI-B.ST,Nivika Fastigheter,Mid
+KARNEL-B.ST,Karnell,Mid
+PRISMA.ST,Prisma Properties,Mid
+INTEA-B.ST,Intea Fastigheter,Mid

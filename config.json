@@ -1,0 +1,24 @@
+{
+  "factor_sleeve": {
+    "USA MOM":   { "ticker": "QDVA.DE", "nordnet_name": "iShares Edge MSCI USA Momentum Factor UCITS ETF", "isin": "IE00BD1F4N50", "ter_pct": 0.20 },
+    "USA QUAL":  { "ticker": "QDVB.DE", "nordnet_name": "iShares Edge MSCI USA Quality Factor UCITS ETF",  "isin": "IE00BD1F4L37", "ter_pct": 0.20 },
+    "USA VAL":   { "ticker": "QDVI.DE", "nordnet_name": "iShares Edge MSCI USA Value Factor UCITS ETF",   "isin": "IE00BD1F4M44", "ter_pct": 0.20 },
+    "USA SMALL": { "ticker": "SXRG.DE", "nordnet_name": "iShares MSCI USA Small Cap ESG Enhanced CTB UCITS ETF", "isin": "IE00B3VWM098", "ter_pct": 0.18 },
+    "EUR MOM":   { "ticker": "CEMR.DE", "nordnet_name": "iShares Edge MSCI Europe Momentum Factor UCITS ETF", "isin": "IE00BQN1K786", "ter_pct": 0.25 },
+    "EUR QUAL":  { "ticker": "CEMQ.DE", "nordnet_name": "iShares Edge MSCI Europe Quality Factor UCITS ETF",  "isin": "IE00BQN1K562", "ter_pct": 0.25 },
+    "EUR VAL":   { "ticker": "CEMS.DE", "nordnet_name": "iShares Edge MSCI Europe Value Factor UCITS ETF",   "isin": "IE00BQN1K901", "ter_pct": 0.25 },
+    "EUR SMALL": { "ticker": "XXSC.DE", "nordnet_name": "Xtrackers MSCI Europe Small Cap UCITS ETF",         "isin": "LU0322253906", "ter_pct": 0.30 }
+  },
+  "sector_sleeve": {
+    "IT":          { "ticker": "QDVE.DE", "nordnet_name": "iShares S&P 500 Information Technology Sector UCITS ETF", "isin": "IE00B3WJKG14", "ter_pct": 0.15 },
+    "ENERGY":      { "ticker": "QDVF.DE", "nordnet_name": "iShares S&P 500 Energy Sector UCITS ETF",                "isin": "IE00B42NKQ00", "ter_pct": 0.15 },
+    "HEALTHCARE":  { "ticker": "QDVG.DE", "nordnet_name": "iShares S&P 500 Health Care Sector UCITS ETF",           "isin": "IE00B43HR379", "ter_pct": 0.15 },
+    "CONS DISC":   { "ticker": "QDVK.DE", "nordnet_name": "iShares S&P 500 Consumer Discretionary Sector UCITS ETF","isin": "IE00B4MCHD36", "ter_pct": 0.15 },
+    "INDUSTRIALS": { "ticker": "2B7C.DE", "nordnet_name": "iShares S&P 500 Industrials Sector UCITS ETF",           "isin": "IE00B4LN9N13", "ter_pct": 0.15 },
+    "CONS STAP":   { "ticker": "2B7D.DE", "nordnet_name": "iShares S&P 500 Consumer Staples Sector UCITS ETF",      "isin": "IE00B40B8R38", "ter_pct": 0.15 },
+    "MATERIALS":   { "ticker": "2B7B.DE", "nordnet_name": "iShares S&P 500 Materials Sector UCITS ETF",             "isin": "IE00B4MKCJ84", "ter_pct": 0.15 }
+  },
+  "regime_baseline":      { "ticker": "IWDA.L" },
+  "regime_cash_compare":  { "ticker": "IBTS.L" },
+  "cash_proxy":           { "ticker": "CASH",  "nordnet_name": "Kontanter", "isin": "CASH", "ter_pct": 0.0 }
+}

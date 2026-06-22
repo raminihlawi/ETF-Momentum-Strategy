@@ -620,8 +620,16 @@ def run(cfg: dict = None, use_cache: bool = False):
     # ── Screening ─────────────────────────────────────────────────────
     if screening_cfg and screening_tickers:
         try:
+            # Build EMA-smoothed prices for screening tickers not in prices_smooth
+            scr_extra = [t for t in screening_tickers if t not in prices_smooth.columns and t in prices_raw.columns]
+            if scr_extra:
+                scr_smooth = prices_raw[scr_extra].ewm(span=EMA_SPAN, adjust=False).mean()
+                prices_scr = pd.concat([prices_smooth, scr_smooth], axis=1)
+            else:
+                prices_scr = prices_smooth
+
             # Build pos_map for the full price index
-            all_idx_sm = prices_smooth.index
+            all_idx_sm = prices_scr.index
             pos_map_sm = {d: i for i, d in enumerate(all_idx_sm)}
             last_date  = all_idx_sm[-1]
 
@@ -631,7 +639,7 @@ def run(cfg: dict = None, use_cache: bool = False):
             if last_alloc:
                 held_tickers = list(last_alloc["holdings"].keys())
                 held_scores  = [
-                    score_accel(t, last_date, prices_smooth, pos_map_sm)
+                    score_accel(t, last_date, prices_scr, pos_map_sm)
                     for t in held_tickers if t != "CASH"
                 ]
                 valid_scores = [s for s in held_scores if not np.isnan(s)]
@@ -644,13 +652,13 @@ def run(cfg: dict = None, use_cache: bool = False):
                 label  = cand.get("label", ticker)
                 note   = cand.get("note", "")
                 try:
-                    sc  = score_accel(ticker, last_date, prices_smooth, pos_map_sm)
+                    sc  = score_accel(ticker, last_date, prices_scr, pos_map_sm)
                     # Raw ROC63 from smooth prices
                     pos = pos_map_sm.get(last_date, -1)
                     roc = np.nan
-                    if pos >= 63 and ticker in prices_smooth.columns:
-                        p0 = float(prices_smooth.iloc[pos - 63][ticker])
-                        p1 = float(prices_smooth.iloc[pos][ticker])
+                    if pos >= 63 and ticker in prices_scr.columns:
+                        p0 = float(prices_scr.iloc[pos - 63][ticker])
+                        p1 = float(prices_scr.iloc[pos][ticker])
                         if p0 > 0:
                             roc = p1 / p0 - 1
 
