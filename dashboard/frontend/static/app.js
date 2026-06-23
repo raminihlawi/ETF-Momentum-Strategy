@@ -167,7 +167,19 @@ const ALLOC_PALETTE = [
 // ── State ──────────────────────────────────────────────────────────
 let DATA = null;
 let CONFIG = null;
-let activeKeys = new Set(["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "ppm_top3", "ppm_top3_recent", "MSCI World"]);
+const _ACTIVE_KEYS_DEFAULT = ["d1_composite", "d2_composite", "d1_accel", "d1_lowcorr", "ppm_top3", "ppm_top3_recent", "MSCI World"];
+const _ACTIVE_KEYS_LS = "etf_active_keys";
+function _loadActiveKeys() {
+  try {
+    const saved = localStorage.getItem(_ACTIVE_KEYS_LS);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch (_) {}
+  return new Set(_ACTIVE_KEYS_DEFAULT);
+}
+function _saveActiveKeys() {
+  try { localStorage.setItem(_ACTIVE_KEYS_LS, JSON.stringify([...activeKeys])); } catch (_) {}
+}
+let activeKeys = _loadActiveKeys();
 let mainChart = null;
 let tickerColorMap = {};
 let ppmColorMap = {};
@@ -265,6 +277,7 @@ function buildToggles() {
     btn.appendChild(document.createTextNode(c.label || key));
     btn.addEventListener("click", () => {
       if (activeKeys.has(key)) activeKeys.delete(key); else activeKeys.add(key);
+      _saveActiveKeys();
       applyToggleStyle(btn, activeKeys.has(key), color);
       renderMainChart();
       renderStats();
