@@ -1319,6 +1319,13 @@ async function renderScreening() {
     return;
   }
 
+  // Fetch streak history (non-blocking — degrade gracefully if API unavailable)
+  let streaks = {};
+  try {
+    const hr = await fetch("/api/screening/history");
+    if (hr.ok) streaks = await hr.json();
+  } catch (_) {}
+
   const sorted    = [...scr.candidates].sort((a, b) => (b.score ?? -99) - (a.score ?? -99));
   const threshold = scr.portfolio_threshold ?? 0;
 
@@ -1336,6 +1343,7 @@ async function renderScreening() {
           <th class="text-right py-2 pr-4">Score</th>
           <th class="text-right py-2 pr-4">ROC 63d</th>
           <th class="text-center py-2 pr-4">Status</th>
+          <th class="text-center py-2 pr-4" title="Antal månader i rad med Välj nu-signal">Streak</th>
           <th class="text-left py-2 pr-4">Not</th>
           <th class="text-center py-2">Ta bort</th>
         </tr>
@@ -1345,6 +1353,8 @@ async function renderScreening() {
   for (const c of sorted) {
     const hasScore    = c.score != null;
     const wouldSelect = c.would_select === true;
+    const streak      = streaks[c.ticker]?.streak ?? 0;
+
     const statusBadge = c.error
       ? `<span class="text-red-400">Fel</span>`
       : wouldSelect
@@ -1352,6 +1362,16 @@ async function renderScreening() {
         : hasScore && c.roc_63d > 0
           ? `<span class="text-yellow-400">○ Bevakning</span>`
           : `<span class="text-muted">– Neutral</span>`;
+
+    // Streak badge: dots for each month, coloured by strength
+    let streakBadge = '<span class="text-muted">—</span>';
+    if (streak >= 1) {
+      const dots  = "●".repeat(Math.min(streak, 6)) + (streak > 6 ? "+" : "");
+      const color = streak >= 3 ? "text-emerald-400" :
+                    streak === 2 ? "text-yellow-400" : "text-slate-400";
+      const tip   = `${streak} månad${streak > 1 ? "er" : ""} i rad`;
+      streakBadge = `<span class="${color} font-mono" title="${tip}">${dots}</span>`;
+    }
 
     const rowColor = wouldSelect ? "text-emerald-300" : "text-slate-300";
     html += `
@@ -1361,6 +1381,7 @@ async function renderScreening() {
         <td class="py-2 pr-4 text-right font-mono">${hasScore ? c.score.toFixed(3) : "—"}</td>
         <td class="py-2 pr-4 text-right font-mono">${c.roc_63d != null ? (c.roc_63d * 100).toFixed(1) + "%" : "—"}</td>
         <td class="py-2 pr-4 text-center">${statusBadge}</td>
+        <td class="py-2 pr-4 text-center">${streakBadge}</td>
         <td class="py-2 pr-4 text-muted">${c.note ?? ""}</td>
         <td class="py-2 text-center">
           <button onclick="removeScreenCandidate('${c.ticker}')" class="text-muted hover:text-red-400 transition-colors">✕</button>

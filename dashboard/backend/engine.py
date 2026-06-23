@@ -691,6 +691,17 @@ def run(cfg: dict = None, use_cache: bool = False):
                 "portfolio_threshold": round(portfolio_threshold, 6),
                 "candidates":          candidates_out,
             }
+
+            # Persist to screener_history table for streak tracking
+            try:
+                from db import upsert_screener_history, init_db
+                init_db(DB_PATH)
+                run_date = datetime.now().strftime("%Y-%m-%d")
+                upsert_screener_history(candidates_out, run_date, path=DB_PATH)
+                log.info(f"Screener history upserted ({len(candidates_out)} tickers, {run_date})")
+            except Exception as he:
+                log.warning(f"Screener history upsert failed: {he}")
+
         except Exception as e:
             log.warning(f"Screening computation failed: {e}")
 

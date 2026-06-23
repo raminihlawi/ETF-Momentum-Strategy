@@ -13,7 +13,7 @@
     { "ticker": "IUIT.L",   "label": "US IT",                 "note": "iShares S&P 500 IT Sector UCITS Acc (LSE)" },
     { "ticker": "NDIA.L",   "label": "India",                 "note": "iShares MSCI India UCITS Acc (LSE)" },
     { "ticker": "XDJP.DE",  "label": "Japan",                 "note": "Xtrackers MSCI Japan UCITS Acc" },
-    { "ticker": "IJPN.L",   "label": "Japan (LSE)",           "note": "iShares Core MSCI Japan UCITS Acc" },
+    { "ticker": "CSJP.L",   "label": "Japan IMI Acc",          "note": "iShares Core MSCI Japan IMI Acc (ex IJPN.L — var Dist)" },
     { "ticker": "IFSW.L",   "label": "EM Asia",               "note": "iShares MSCI EM Asia UCITS Acc" },
     { "ticker": "VFEM.DE",  "label": "EM Broad",              "note": "Vanguard FTSE Emerging Markets UCITS Acc" },
     { "ticker": "IMEU.L",   "label": "Europe Broad",          "note": "iShares Core MSCI Europe UCITS Acc" },
@@ -22,12 +22,11 @@
     { "ticker": "CSPX.L",   "label": "S&P 500 Acc",           "note": "iShares Core S&P 500 UCITS Acc (LSE)" },
     { "ticker": "HMWO.L",   "label": "MSCI World",            "note": "HSBC MSCI World UCITS Acc (LSE)" },
     { "ticker": "IWVL.L",   "label": "World Value",           "note": "iShares Edge MSCI World Value Factor UCITS Acc" },
-    { "ticker": "ZPRS.DE",  "label": "Europe Momentum",       "note": "SPDR MSCI Europe Momentum UCITS Acc" },
+    { "ticker": "ZPRX.DE",  "label": "Europe Momentum",       "note": "SPDR MSCI Europe Momentum UCITS Acc (ex ZPRS.DE — var World Small Cap)" },
     { "ticker": "IBTS.L",   "label": "US Treasuries 7-10y",   "note": "iShares $ Treasury Bond 7-10yr UCITS Acc" },
     { "ticker": "IBCX.DE",  "label": "EUR Corp Bond",         "note": "iShares Core EUR Corp Bond UCITS Acc" },
-    { "ticker": "IBGL.L",   "label": "Global Govt Bond",      "note": "iShares Global Govt Bond UCITS Acc" },
-    { "ticker": "IEGE.L",   "label": "EM Govt Bond",          "note": "iShares J.P. Morgan EM Local Govt Bond UCITS" },
-    { "ticker": "XAIX",     "label": "AI & Big Data (US)",    "note": "Xtrackers AI and Big Data UCITS (NYSE)" },
-    { "ticker": "DFEN",     "label": "US Aerospace (US)",     "note": "Direxion Aerospace & Defense (NYSE)" }
+    { "ticker": "IGLO.L",   "label": "Global Govt Bond",      "note": "iShares Core Global Govt Bond Acc (ex IBGL.L — var Euro 15-30yr Dist)" },
+    { "ticker": "SEML.L",   "label": "EM Govt Bond",          "note": "iShares JPM EM Local Govt Bond Acc (ex IEGE.L — var Euro 0-1yr cash)" },
+    { "ticker": "XAIX",     "label": "AI & Big Data (US)",    "note": "Xtrackers AI and Big Data UCITS (NYSE)" }
   ]
 }

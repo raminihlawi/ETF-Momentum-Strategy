@@ -2,8 +2,9 @@
 SQLite database layer — schema, connection, read/write helpers.
 
 Tables:
-  etf_prices  (ticker, date, close, high, low)
-  ppm_nav     (ppm_number, date, nav_sek)
+  etf_prices       (ticker, date, close, high, low)
+  ppm_nav          (ppm_number, date, nav_sek)
+  screener_history (ticker, run_date, score, roc_63d, would_select, error)
 
 DB location is controlled by the DATA_DIR environment variable (default /data).
 In development, fall back to the project's own directory.
@@ -40,8 +41,19 @@ CREATE TABLE IF NOT EXISTS ppm_nav (
     PRIMARY KEY (ppm_number, date)
 );
 
-CREATE INDEX IF NOT EXISTS ix_etf_ticker ON etf_prices (ticker, date);
-CREATE INDEX IF NOT EXISTS ix_ppm_number ON ppm_nav  (ppm_number, date);
+CREATE TABLE IF NOT EXISTS screener_history (
+    ticker       TEXT NOT NULL,
+    run_date     TEXT NOT NULL,   -- 'YYYY-MM-DD' of engine run
+    score        REAL,
+    roc_63d      REAL,
+    would_select INTEGER NOT NULL DEFAULT 0,
+    error        TEXT,
+    PRIMARY KEY (ticker, run_date)
+);
+
+CREATE INDEX IF NOT EXISTS ix_etf_ticker  ON etf_prices      (ticker, date);
+CREATE INDEX IF NOT EXISTS ix_ppm_number  ON ppm_nav         (ppm_number, date);
+CREATE INDEX IF NOT EXISTS ix_scr_ticker  ON screener_history (ticker, run_date);
 """
 
 
@@ -158,3 +170,89 @@ def load_ppm_nav(
 
     bday_idx = pd.bdate_range(wide.index[0], wide.index[-1])
     return wide.reindex(bday_idx).ffill()
+
+
+# ── Screener history helpers ─────────────────────────────────────────
+def upsert_screener_history(candidates: list[dict], run_date: str,
+                             path: Path | None = None) -> None:
+    """Persist one engine run's screener results. Idempotent (INSERT OR REPLACE)."""
+    rows = [
+        (
+            c["ticker"],
+            run_date,
+            c.get("score"),
+            c.get("roc_63d"),
+            1 if c.get("would_select") else 0,
+            c.get("error"),
+        )
+        for c in candidates
+    ]
+    with get_conn(path) as conn:
+        conn.executemany(
+            """INSERT OR REPLACE INTO screener_history
+               (ticker, run_date, score, roc_63d, would_select, error)
+               VALUES (?,?,?,?,?,?)""",
+            rows,
+        )
+
+
+def load_screener_streak(path: Path | None = None) -> dict:
+    """
+    For every ticker in screener_history, compute how many consecutive
+    calendar months (ending at the latest run month) the ticker showed
+    would_select=1 on the last engine run of that month.
+
+    Returns {ticker: {"streak": int, "last_date": "YYYY-MM-DD", "months": ["YYYY-MM", ...]}}
+    """
+    with get_conn(path) as conn:
+        rows = conn.execute(
+            """SELECT ticker, run_date, would_select
+               FROM screener_history
+               ORDER BY ticker, run_date"""
+        ).fetchall()
+
+    if not rows:
+        return {}
+
+    # Group by ticker → {month: last would_select value}
+    from collections import defaultdict
+    ticker_months: dict[str, dict[str, int]] = defaultdict(dict)
+    for ticker, run_date, would_select in rows:
+        month = run_date[:7]  # YYYY-MM
+        # Keep the latest run's value per month (ORDER BY run_date ascending)
+        ticker_months[ticker][month] = would_select
+
+    result = {}
+    for ticker, month_map in ticker_months.items():
+        sorted_months = sorted(month_map.keys(), reverse=True)
+        if not sorted_months:
+            continue
+        last_month = sorted_months[0]
+
+        # Count consecutive months with would_select=1 going backwards
+        streak = 0
+        prev_month = None
+        for m in sorted_months:
+            # Ensure months are truly consecutive (no gaps)
+            if prev_month is not None:
+                y1, mo1 = map(int, prev_month.split("-"))
+                y2, mo2 = map(int, m.split("-"))
+                expected_prev = (y1 * 12 + mo1 - 1)
+                actual        = (y2 * 12 + mo2)
+                if expected_prev != actual:
+                    break  # gap in months — streak ends
+            if month_map[m] == 1:
+                streak += 1
+                prev_month = m
+            else:
+                break
+
+        # Last engine-run date for this ticker
+        last_run = max(r[1] for r in rows if r[0] == ticker)
+        result[ticker] = {
+            "streak":    streak,
+            "last_date": last_run,
+            "months":    sorted_months[:streak],
+        }
+
+    return result

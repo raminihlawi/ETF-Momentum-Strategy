@@ -1,94 +1,32 @@
 {
   "candidates": [
-    {
-      "ticker": "SEMI.DE",
-      "label": "Semiconductors",
-      "note": "Global semis, mer koncentrerat än IT"
-    },
-    {
-      "ticker": "AIAI.DE",
-      "label": "AI & Robotics",
-      "note": "Xtrackers AI & Big Data"
-    },
-    {
-      "ticker": "IQQH.DE",
-      "label": "Clean Energy",
-      "note": "iShares Global Clean Energy"
-    },
-    {
-      "ticker": "DFND.SW",
-      "label": "Defence",
-      "note": "iShares Defence & Aerospace"
-    },
-    {
-      "ticker": "NDIA.DE",
-      "label": "India",
-      "note": "iShares MSCI India"
-    },
-    {
-      "ticker": "XDJP.DE",
-      "label": "Japan",
-      "note": "Xtrackers MSCI Japan"
-    },
-    {
-      "ticker": "BNKS.DE",
-      "label": "Global Financials",
-      "note": "iShares MSCI World Financials"
-    },
-    {
-      "ticker": "ISPY.DE",
-      "label": "Cybersecurity",
-      "note": "L&G Cyber Security ETF"
-    },
-    {
-      "ticker": "2B7A.DE",
-      "label": "Utilities",
-      "note": "iShares S&P 500 Utilities"
-    },
-    {
-      "ticker": "QDVH.DE",
-      "label": "Comms Services",
-      "note": "iShares S&P 500 Comm. Services"
-    },
-    {
-      "ticker": "DFEN",
-      "label": "VanEck Defense",
-      "note": ""
-    },
-    {
-      "ticker": "XDWF",
-      "label": "Xtrackers World Financials",
-      "note": ""
-    },
-    {
-      "ticker": "SXRV",
-      "label": "iShares Nasdaq 100",
-      "note": ""
-    },
-    {
-      "ticker": "SXR7",
-      "label": "iShares Core MSCI EMU",
-      "note": ""
-    },
-    {
-      "ticker": "SXRT",
-      "label": "iShares EURO STOXX 50",
-      "note": ""
-    },
-    {
-      "ticker": "CEBL",
-      "label": "iShares MSCI EM Asia",
-      "note": ""
-    },
-    {
-      "ticker": "DBX8",
-      "label": "Xtrackers Korea",
-      "note": ""
-    },
-    {
-      "ticker": "XAIX",
-      "label": "Xtrackers AI and BigData",
-      "note": ""
-    }
+    { "ticker": "SEMA.L",   "label": "Semiconductors",       "note": "VanEck Semiconductor UCITS Acc (LSE)" },
+    { "ticker": "IQQB.DE",  "label": "Biotech",               "note": "iShares Nasdaq Biotech UCITS Acc" },
+    { "ticker": "HPRO.L",   "label": "Healthcare Innovation", "note": "HSBC Healthcare Innovation UCITS Acc" },
+    { "ticker": "WCBR.L",   "label": "Cybersecurity",         "note": "WisdomTree Cybersecurity UCITS Acc" },
+    { "ticker": "URNU.DE",  "label": "Uranium / Nuclear",     "note": "VanEck Uranium & Nuclear UCITS Acc" },
+    { "ticker": "2B76.DE",  "label": "Automation & Robotics", "note": "iShares Automation & Robotics UCITS Acc" },
+    { "ticker": "IQQH.DE",  "label": "Clean Energy",          "note": "iShares Global Clean Energy UCITS Acc" },
+    { "ticker": "DFND.SW",  "label": "Defence & Aerospace",   "note": "iShares Defence & Aerospace UCITS Acc" },
+    { "ticker": "2B7A.DE",  "label": "US Utilities",          "note": "iShares S&P 500 Utilities Sector UCITS Acc" },
+    { "ticker": "QDVH.DE",  "label": "US Comm. Services",     "note": "iShares S&P 500 Comm. Services UCITS Acc" },
+    { "ticker": "IUIT.L",   "label": "US IT",                 "note": "iShares S&P 500 IT Sector UCITS Acc (LSE)" },
+    { "ticker": "NDIA.L",   "label": "India",                 "note": "iShares MSCI India UCITS Acc (LSE)" },
+    { "ticker": "XDJP.DE",  "label": "Japan",                 "note": "Xtrackers MSCI Japan UCITS Acc" },
+    { "ticker": "CSJP.L",   "label": "Japan IMI Acc",          "note": "iShares Core MSCI Japan IMI Acc (ex IJPN.L — var Dist)" },
+    { "ticker": "IFSW.L",   "label": "EM Asia",               "note": "iShares MSCI EM Asia UCITS Acc" },
+    { "ticker": "VFEM.DE",  "label": "EM Broad",              "note": "Vanguard FTSE Emerging Markets UCITS Acc" },
+    { "ticker": "IMEU.L",   "label": "Europe Broad",          "note": "iShares Core MSCI Europe UCITS Acc" },
+    { "ticker": "WSML.L",   "label": "World Small Cap",       "note": "iShares MSCI World Small Cap UCITS Acc" },
+    { "ticker": "EQQQ.DE",  "label": "Nasdaq 100",            "note": "Invesco EQQQ Nasdaq-100 UCITS Acc" },
+    { "ticker": "CSPX.L",   "label": "S&P 500 Acc",           "note": "iShares Core S&P 500 UCITS Acc (LSE)" },
+    { "ticker": "HMWO.L",   "label": "MSCI World",            "note": "HSBC MSCI World UCITS Acc (LSE)" },
+    { "ticker": "IWVL.L",   "label": "World Value",           "note": "iShares Edge MSCI World Value Factor UCITS Acc" },
+    { "ticker": "ZPRX.DE",  "label": "Europe Momentum",       "note": "SPDR MSCI Europe Momentum UCITS Acc (ex ZPRS.DE — var World Small Cap)" },
+    { "ticker": "IBTS.L",   "label": "US Treasuries 7-10y",   "note": "iShares $ Treasury Bond 7-10yr UCITS Acc" },
+    { "ticker": "IBCX.DE",  "label": "EUR Corp Bond",         "note": "iShares Core EUR Corp Bond UCITS Acc" },
+    { "ticker": "IGLO.L",   "label": "Global Govt Bond",      "note": "iShares Core Global Govt Bond Acc (ex IBGL.L — var Euro 15-30yr Dist)" },
+    { "ticker": "SEML.L",   "label": "EM Govt Bond",          "note": "iShares JPM EM Local Govt Bond Acc (ex IEGE.L — var Euro 0-1yr cash)" },
+    { "ticker": "XAIX",     "label": "AI & Big Data (US)",    "note": "Xtrackers AI and Big Data UCITS (NYSE)" }
   ]
 }

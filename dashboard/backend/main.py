@@ -261,6 +261,17 @@ def add_screening(payload: dict, bg: BackgroundTasks, _=Depends(require_auth)):
     return {"status": "added", "ticker": ticker}
 
 
+@app.get("/api/screening/history")
+def get_screening_history():
+    """Return consecutive-month streak data for all screener candidates."""
+    try:
+        from db import load_screener_streak
+        return JSONResponse(load_screener_streak(path=DB_PATH))
+    except Exception as e:
+        log.warning(f"Screener history load failed: {e}")
+        return JSONResponse({})
+
+
 @app.delete("/api/screening/{ticker}")
 def remove_screening(ticker: str, bg: BackgroundTasks, _=Depends(require_auth)):
     if not SCREENING_CONFIG.exists():
