@@ -686,10 +686,41 @@ def run(cfg: dict = None, use_cache: bool = False):
                         "error": str(e),
                     })
 
+            # Score all factor + sector sleeve tickers for comparison
+            held_set = set(held_tickers) if last_alloc else set()
+            factor_labels = {t: lbl for lbl, t in factor_t}
+            sector_labels = {t: lbl for lbl, t in sector_t}
+            portfolio_universe = []
+            pos = pos_map_sm.get(last_date, -1)
+            for sleeve_name, sleeve_pairs in [("factor", factor_t), ("sector", sector_t)]:
+                for lbl, t in sleeve_pairs:
+                    try:
+                        sc  = score_accel(t, last_date, prices_scr, pos_map_sm)
+                        roc = np.nan
+                        if pos >= 63 and t in prices_scr.columns:
+                            p0 = float(prices_scr.iloc[pos - 63][t])
+                            p1 = float(prices_scr.iloc[pos][t])
+                            if p0 > 0:
+                                roc = p1 / p0 - 1
+                        portfolio_universe.append({
+                            "ticker":  t,
+                            "label":   lbl,
+                            "sleeve":  sleeve_name,
+                            "score":   round(float(sc), 6) if not np.isnan(sc) else None,
+                            "roc_63d": round(float(roc), 6) if not np.isnan(roc) else None,
+                            "is_held": t in held_set,
+                        })
+                    except Exception:
+                        portfolio_universe.append({
+                            "ticker": t, "label": lbl, "sleeve": sleeve_name,
+                            "score": None, "roc_63d": None, "is_held": t in held_set,
+                        })
+
             out["screening"] = {
                 "computed_at":         datetime.now(timezone.utc).isoformat(),
                 "portfolio_threshold": round(portfolio_threshold, 6),
                 "candidates":          candidates_out,
+                "portfolio_universe":  portfolio_universe,
             }
 
             # Persist to screener_history table for streak tracking

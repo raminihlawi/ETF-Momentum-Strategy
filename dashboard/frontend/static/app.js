@@ -1402,6 +1402,49 @@ async function renderScreening() {
       </tr>`;
   }
   html += "</tbody></table></div>";
+
+  // ── Portfolio universe comparison ─────────────────────────────────
+  const universe = scr.portfolio_universe;
+  if (universe?.length) {
+    const sortedU = [...universe].sort((a, b) => (b.score ?? -99) - (a.score ?? -99));
+    html += `
+      <div class="mt-6 mb-2 text-xs font-semibold text-muted uppercase tracking-widest">
+        Nuvarande ETF-universum (factor + sector sleeve)
+      </div>
+      <div class="overflow-x-auto">
+      <table class="w-full text-xs border-collapse">
+        <thead>
+          <tr class="text-muted border-b border-border">
+            <th class="text-left py-2 pr-4">Slot</th>
+            <th class="text-left py-2 pr-4">Ticker</th>
+            <th class="text-left py-2 pr-4">Ärm</th>
+            <th class="text-right py-2 pr-4">Score</th>
+            <th class="text-right py-2 pr-4">ROC 63d</th>
+            <th class="text-center py-2">Hålls nu</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    for (const u of sortedU) {
+      const hasScore = u.score != null;
+      const heldBadge = u.is_held
+        ? `<span class="text-emerald-400 font-medium">● Aktiv</span>`
+        : `<span class="text-muted">—</span>`;
+      const rowColor = u.is_held ? "text-emerald-300" : "text-slate-400";
+      const sleeveLabel = u.sleeve === "factor" ? "Faktor" : "Sektor";
+      html += `
+        <tr class="border-b border-border/30 hover:bg-panel/50 ${rowColor}">
+          <td class="py-2 pr-4 font-medium">${u.label}</td>
+          <td class="py-2 pr-4 font-mono text-muted">${u.ticker}</td>
+          <td class="py-2 pr-4 text-muted">${sleeveLabel}</td>
+          <td class="py-2 pr-4 text-right font-mono">${hasScore ? u.score.toFixed(3) : "—"}</td>
+          <td class="py-2 pr-4 text-right font-mono">${u.roc_63d != null ? (u.roc_63d * 100).toFixed(1) + "%" : "—"}</td>
+          <td class="py-2 text-center">${heldBadge}</td>
+        </tr>`;
+    }
+    html += "</tbody></table></div>";
+  }
+
   document.getElementById("screen-table").innerHTML = html;
 }
 
