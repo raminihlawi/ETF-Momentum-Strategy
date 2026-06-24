@@ -168,8 +168,7 @@ def get_logs(n: int = 300):
     lines = []
     try:
         result = subprocess.run(
-            ["journalctl", "-u", "etf-dashboard", "-n", str(min(n, 1000)),
-             "--no-pager", "--output=short-iso"],
+            ["journalctl", "-u", "etf-dashboard", "-n", str(min(n, 1000)), "--no-pager"],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode == 0:
