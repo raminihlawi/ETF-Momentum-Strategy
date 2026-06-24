@@ -1471,7 +1471,14 @@ async function addScreenCandidate() {
 
 async function removeScreenCandidate(ticker) {
   const res = await fetch(`/api/screening/${encodeURIComponent(ticker)}`, { method: "DELETE" });
-  if (res.ok) await loadData();
+  if (res.ok) {
+    if (DATA?.screening?.candidates) {
+      DATA.screening.candidates = DATA.screening.candidates.filter(c => c.ticker !== ticker);
+    }
+    renderScreening();
+  } else {
+    alert("Kunde inte ta bort " + ticker + ": " + res.status);
+  }
 }
 
 // ── Documentation page ─────────────────────────────────────────────
