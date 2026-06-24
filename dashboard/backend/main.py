@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 log = logging.getLogger(__name__)
+_LOG_PATH: "Path | None" = None  # set after BASE_DIR / DATA_DIR are known
 
 # ── Paths ──────────────────────────────────────────────────────────
 BASE_DIR  = Path(__file__).parent
@@ -98,7 +99,18 @@ async def lifespan(app: FastAPI):
 # ── App ────────────────────────────────────────────────────────────
 app = FastAPI(title="ETF Dashboard", docs_url=None, redoc_url=None, lifespan=lifespan)
 
+_LOG_PATH = _DATA_DIR / "dashboard.log"
+_fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+# Also write to a rotating file so /api/logs can read it
+try:
+    from logging.handlers import RotatingFileHandler as _RFH
+    _fh = _RFH(_LOG_PATH, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    _fh.setFormatter(_fmt)
+    logging.getLogger().addHandler(_fh)
+except Exception as _e:
+    log.warning("Could not set up log file: %s", _e)
 
 
 # ── Auth ───────────────────────────────────────────────────────────
@@ -164,23 +176,16 @@ def recalculate(bg: BackgroundTasks, _=Depends(require_auth)):
 
 @app.get("/api/logs")
 def get_logs(n: int = 300):
-    """Return the last n log lines from the systemd journal (or process stdout fallback)."""
-    lines = []
+    """Return the last n log lines from dashboard.log in DATA_DIR."""
+    n = min(n, 2000)
+    if not _LOG_PATH or not _LOG_PATH.exists():
+        return JSONResponse({"lines": ["(log file not found — no entries yet)"]})
     try:
-        result = subprocess.run(
-            ["journalctl", "-u", "etf-dashboard", "-n", str(min(n, 1000)), "--no-pager"],
-            capture_output=True, text=True, timeout=10,
-            env={**os.environ, "PAGER": "cat", "SYSTEMD_PAGER": "cat"},
-        )
-        if result.returncode == 0:
-            lines = result.stdout.splitlines()
-        else:
-            lines = ["(journalctl unavailable — " + (result.stderr.strip() or "no output") + ")"]
-    except FileNotFoundError:
-        lines = ["(journalctl not found — not running under systemd)"]
+        text = _LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()[-n:]
+        return JSONResponse({"lines": lines})
     except Exception as exc:
-        lines = [f"(log fetch error: {exc})"]
-    return JSONResponse({"lines": lines})
+        return JSONResponse({"lines": [f"(log read error: {exc})"]})
 
 
 @app.post("/api/refresh-data")
