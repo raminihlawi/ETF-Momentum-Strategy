@@ -170,6 +170,7 @@ def get_logs(n: int = 300):
         result = subprocess.run(
             ["journalctl", "-u", "etf-dashboard", "-n", str(min(n, 1000)), "--no-pager"],
             capture_output=True, text=True, timeout=10,
+            env={**os.environ, "PAGER": "cat", "SYSTEMD_PAGER": "cat"},
         )
         if result.returncode == 0:
             lines = result.stdout.splitlines()
