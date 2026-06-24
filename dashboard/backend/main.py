@@ -162,6 +162,27 @@ def recalculate(bg: BackgroundTasks, _=Depends(require_auth)):
     return {"status": "started"}
 
 
+@app.get("/api/logs")
+def get_logs(n: int = 300):
+    """Return the last n log lines from the systemd journal (or process stdout fallback)."""
+    lines = []
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", "etf-dashboard", "-n", str(min(n, 1000)),
+             "--no-pager", "--output=short-iso"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            lines = result.stdout.splitlines()
+        else:
+            lines = ["(journalctl unavailable — " + (result.stderr.strip() or "no output") + ")"]
+    except FileNotFoundError:
+        lines = ["(journalctl not found — not running under systemd)"]
+    except Exception as exc:
+        lines = [f"(log fetch error: {exc})"]
+    return JSONResponse({"lines": lines})
+
+
 @app.post("/api/refresh-data")
 def refresh_data(bg: BackgroundTasks, _=Depends(require_auth)):
     """Trigger a full data fetch (ETF + PPM) then recalculate."""

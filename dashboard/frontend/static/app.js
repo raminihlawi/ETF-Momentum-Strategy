@@ -194,7 +194,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(tab) {
-  const views = ["dashboard", "settings", "funds", "screen", "docs"];
+  const views = ["dashboard", "settings", "funds", "screen", "logs", "docs"];
   views.forEach(v => document.getElementById("view-" + v)?.classList.toggle("hidden", tab !== v));
   views.forEach(v => {
     const el = document.getElementById("tab-" + v);
@@ -202,6 +202,7 @@ function switchTab(tab) {
   });
   if (tab === "funds")    renderFundsTable();
   if (tab === "screen")   renderScreening();
+  if (tab === "logs")     renderLogs();
   if (tab === "docs")     renderDocs();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
@@ -1479,6 +1480,56 @@ async function removeScreenCandidate(ticker) {
   } else {
     alert("Kunde inte ta bort " + ticker + ": " + res.status);
   }
+}
+
+// ── Logs page ──────────────────────────────────────────────────────
+let _logsAutoRefresh = null;
+
+async function renderLogs() {
+  const el = document.getElementById("view-logs");
+  if (!el) return;
+
+  function colorLine(line) {
+    if (/ERROR|CRITICAL/i.test(line))   return `<span class="text-red-400">${escHtml(line)}</span>`;
+    if (/WARNING/i.test(line))          return `<span class="text-yellow-400">${escHtml(line)}</span>`;
+    if (/Wrote|upserted|Done|started|ready|complete/i.test(line))
+                                         return `<span class="text-emerald-400">${escHtml(line)}</span>`;
+    return `<span class="text-slate-400">${escHtml(line)}</span>`;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  async function fetchAndRender() {
+    const box = document.getElementById("log-lines");
+    if (!box) return;
+    try {
+      const res = await fetch("/api/logs?n=300");
+      if (!res.ok) throw new Error(res.status);
+      const { lines } = await res.json();
+      box.innerHTML = lines.map(colorLine).join("\n");
+      box.scrollTop = box.scrollHeight;
+    } catch (e) {
+      if (box) box.innerHTML = `<span class="text-red-400">Kunde inte hämta loggar: ${e.message}</span>`;
+    }
+  }
+
+  el.innerHTML = `
+    <div class="flex items-center gap-3 mb-3">
+      <span class="text-xs font-semibold text-muted uppercase tracking-widest">Systemloggar</span>
+      <button onclick="renderLogs()"
+        class="text-xs px-3 py-1 rounded border border-border text-muted hover:text-slate-300 hover:border-slate-500 transition-colors">
+        ↻ Uppdatera
+      </button>
+      <span class="text-xs text-muted">Senaste 300 rader · journalctl -u etf-dashboard</span>
+    </div>
+    <pre id="log-lines"
+      class="bg-panel border border-border rounded-lg p-4 text-xs font-mono leading-5
+             overflow-auto h-[70vh] whitespace-pre-wrap break-all text-slate-400">
+Laddar…</pre>`;
+
+  await fetchAndRender();
 }
 
 // ── Documentation page ─────────────────────────────────────────────
