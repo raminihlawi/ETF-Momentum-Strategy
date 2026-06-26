@@ -139,6 +139,49 @@ const STRATEGY_SPECS = {
     ],
     source: "Ursprunglig backtest-period (2020–2026)",
   },
+  sp500_pit_top5: {
+    color: "#34d399",
+    tagline: "D1-ACCEL direkt på S&P 500-aktier — Top 5, point-in-time universum",
+    description: "Samma accelerated-momentum-signal som ETF-kärnan men applicerat direkt på enskilda S&P 500-aktier. Universumet är point-in-time: på varje rebalansdatum tillåts bara aktier som faktiskt var med i S&P 500 vid den tidpunkten. Parametrar optimerade via grid-sweep (384 kombinationer). Pris från yfinance (nuvarande) + Tiingo justerade priser (borttagna). 842 tickers, ~490 tillgängliga per datum.",
+    params: [
+      { k: "Signal",        v: "ROC(84d) + Accel(20d) på EMA(3) av (H+L)/2" },
+      { k: "Universum",     v: "S&P 500 — point-in-time (842 tickers, ~490/datum)" },
+      { k: "Urval",         v: "Top 5 aktier, likviktade (20% var)" },
+      { k: "Regimfilter",   v: "SPY 84d return ≤ 0 → 100% kontanter" },
+      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Data",          v: "yfinance (aktiva) + Tiingo adj. (borttagna 1996–)" },
+    ],
+    source: "Optimerad sweep. Sharpe 0.97 · CAGR +29% · Max DD −28%",
+  },
+  sp500_pit_top7: {
+    color: "#10b981",
+    tagline: "D1-ACCEL S&P 500-aktier — Top 7, bäst risk-justerad avkastning",
+    description: "Top-7 ger den bästa Sharpe-kvoten av alla N-varianter i parametersweepen. Balansen mellan koncentration (hög alpha) och diversifiering (lägre drawdown) är optimal vid 7 aktier med dessa parametrar.",
+    params: [
+      { k: "Signal",        v: "ROC(84d) + Accel(20d) på EMA(3) av (H+L)/2" },
+      { k: "Universum",     v: "S&P 500 — point-in-time (~490 tickers/datum)" },
+      { k: "Urval",         v: "Top 7 aktier, likviktade (~14% var)" },
+      { k: "Regimfilter",   v: "SPY 84d return ≤ 0 → 100% kontanter" },
+      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+    ],
+    source: "Bäst i sweep. Sharpe 0.99 · CAGR +27% · Max DD −26%",
+  },
+  sp500_pit_top10: {
+    color: "#6ee7b7",
+    tagline: "D1-ACCEL S&P 500-aktier — Top 10, bredare diversifiering",
+    description: "Top-10 ger lägst volatilitet och maximal Sharpe för 10-aktieportföljer. Sharpe 1.04 — högre än ETF-kärnan men med ~2× CAGR. Optimal konfiguration identifierad via grid-sweep.",
+    params: [
+      { k: "Signal",        v: "ROC(84d) + Accel(20d) på EMA(3) av (H+L)/2" },
+      { k: "Universum",     v: "S&P 500 — point-in-time (~490 tickers/datum)" },
+      { k: "Urval",         v: "Top 10 aktier, likviktade (10% var)" },
+      { k: "Regimfilter",   v: "SPY 84d return ≤ 0 → 100% kontanter" },
+      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+    ],
+    source: "Optimerad sweep. Sharpe 1.04 · CAGR +26% · Max DD −21%",
+  },
 };
 
 // ── Palette ────────────────────────────────────────────────────────
@@ -151,8 +194,11 @@ const SERIES_CFG = {
   d2_accel:     { label: "D2-accel.",        color: "#fcd34d", width: 2.0 },
   d1_lowcorr:   { label: "D1-low-corr.",     color: "#f43f5e", width: 2.0 },
   d2_lowcorr:   { label: "D2-low-corr.",     color: "#fb7185", width: 2.0 },
-  ppm_top3:        { label: "PPM top-3 (2001+)", color: "#06b6d4", width: 2.5 },
-  ppm_top3_recent: { label: "PPM top-3 (2020+)", color: "#22d3ee", width: 2.5 },
+  ppm_top3:           { label: "PPM top-3 (2001+)", color: "#06b6d4", width: 2.5 },
+  ppm_top3_recent:    { label: "PPM top-3 (2020+)", color: "#22d3ee", width: 2.5 },
+  sp500_pit_top5:     { label: "Aktier — Top 5",    color: "#34d399", width: 2.5 },
+  sp500_pit_top7:     { label: "Aktier — Top 7",    color: "#10b981", width: 2.5 },
+  sp500_pit_top10:    { label: "Aktier — Top 10",   color: "#6ee7b7", width: 2.0 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
@@ -180,21 +226,24 @@ function _saveActiveKeys() {
   try { localStorage.setItem(_ACTIVE_KEYS_LS, JSON.stringify([...activeKeys])); } catch (_) {}
 }
 let activeKeys = _loadActiveKeys();
-let mainChart = null;
+let mainChart   = null;
+let stocksChart = null;
 let tickerColorMap = {};
-let ppmColorMap = {};
+let ppmColorMap    = {};
+let stockColorMap  = {};
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
-  mainChart = echarts.init(document.getElementById("main-chart"), null, { renderer: "canvas" });
-  window.addEventListener("resize", () => mainChart?.resize());
+  mainChart   = echarts.init(document.getElementById("main-chart"),   null, { renderer: "canvas" });
+  stocksChart = echarts.init(document.getElementById("stocks-chart"), null, { renderer: "canvas" });
+  window.addEventListener("resize", () => { mainChart?.resize(); stocksChart?.resize(); });
   document.getElementById("start-date").addEventListener("change", () => { if (DATA) renderMainChart(); });
   await loadData();
 });
 
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(tab) {
-  const views = ["dashboard", "settings", "funds", "screen", "logs", "docs"];
+  const views = ["dashboard", "settings", "funds", "screen", "stocks", "logs", "docs"];
   views.forEach(v => document.getElementById("view-" + v)?.classList.toggle("hidden", tab !== v));
   views.forEach(v => {
     const el = document.getElementById("tab-" + v);
@@ -204,6 +253,7 @@ function switchTab(tab) {
   if (tab === "screen")   renderScreening();
   if (tab === "logs")     renderLogs();
   if (tab === "docs")     renderDocs();
+  if (tab === "stocks")   renderStocksPage();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -233,8 +283,10 @@ function renderAll() {
 
 function buildTickerColorMap() {
   tickerColorMap = {};
-  ppmColorMap = {};
+  ppmColorMap    = {};
+  stockColorMap  = {};
   let colorIdx = 0;
+  // ETF strategies
   for (const sk of ["top1_top1","top2_top2","d1_composite","d2_composite",
                     "d1_accel","d2_accel","d1_lowcorr","d2_lowcorr"]) {
     const alloc = DATA?.strategies?.[sk]?.allocation;
@@ -251,6 +303,21 @@ function buildTickerColorMap() {
     ppmAlloc.tickers.forEach((t, i) => {
       if (!(t in ppmColorMap) && ppmAlloc.weights.some(row => row[i] > 0))
         ppmColorMap[t] = ALLOC_PALETTE[ppmIdx++ % ALLOC_PALETTE.length];
+    });
+  }
+  // Stock tickers — build a single shared color map across top5/top10
+  const STOCK_PALETTE = [
+    "#34d399","#6ee7b7","#f59e0b","#fcd34d","#60a5fa","#93c5fd","#f43f5e","#fb7185",
+    "#a78bfa","#c4b5fd","#38bdf8","#7dd3fc","#fb923c","#fdba74","#4ade80","#86efac",
+    "#e879f9","#f0abfc","#2dd4bf","#5eead4","#818cf8","#a5b4fc",
+  ];
+  let stockIdx = 0;
+  for (const sk of ["sp500_pit_top5","sp500_pit_top7","sp500_pit_top10"]) {
+    const alloc = DATA?.strategies?.[sk]?.allocation;
+    if (!alloc?.tickers) continue;
+    alloc.tickers.forEach((t, i) => {
+      if (!(t in stockColorMap) && t !== "CASH" && alloc.weights.some(row => row[i] > 0))
+        stockColorMap[t] = STOCK_PALETTE[stockIdx++ % STOCK_PALETTE.length];
     });
   }
 }
@@ -963,6 +1030,379 @@ function renderStats() {
       ${heatmapSection}
       ${allocSection}
     </div>`;
+}
+
+// ── Stocks page ────────────────────────────────────────────────────
+const STOCK_STRATS = [
+  { key: "sp500_pit_top5",  label: "Aktier — Top 5",  color: "#34d399" },
+  { key: "sp500_pit_top7",  label: "Aktier — Top 7",  color: "#10b981" },
+  { key: "sp500_pit_top10", label: "Aktier — Top 10", color: "#6ee7b7" },
+];
+
+function renderStocksPage() {
+  if (!DATA) return;
+  const strategies = DATA.strategies || {};
+
+  // Check any stock data exists
+  const available = STOCK_STRATS.filter(s => strategies[s.key]);
+  if (!available.length) {
+    document.getElementById("stocks-stats").innerHTML =
+      `<p class="text-xs text-muted italic px-1">Ingen aktiedata tillgänglig — kör engine.py för att generera.</p>`;
+    return;
+  }
+
+  buildStocksToggles(available);
+  renderStocksChart();
+  renderStocksSignalCards(available);
+  renderStocksStats(available);
+}
+
+let stocksActiveKeys = new Set(["sp500_pit_top5", "sp500_pit_top7", "sp500_pit_top10", "d1_accel"]);
+
+function buildStocksToggles(available) {
+  const container = document.getElementById("stocks-toggles");
+  if (!container) return;
+  container.innerHTML = "";
+  // Stock variants
+  available.forEach(({ key, label, color }) => {
+    const on  = stocksActiveKeys.has(key);
+    const btn = document.createElement("button");
+    btn.dataset.key = key;
+    btn.className   = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+    applyToggleStyle(btn, on, color);
+    const dot = document.createElement("span");
+    dot.className    = "w-2 h-2 rounded-full flex-shrink-0";
+    dot.style.background = color;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(label));
+    btn.addEventListener("click", () => {
+      if (stocksActiveKeys.has(key)) stocksActiveKeys.delete(key);
+      else stocksActiveKeys.add(key);
+      applyToggleStyle(btn, stocksActiveKeys.has(key), color);
+      renderStocksChart();
+      renderStocksStats(available);
+    });
+    container.appendChild(btn);
+  });
+  // ETF D1-accel reference toggle
+  const ref = { key: "d1_accel", label: "D1-accel ETF (ref)", color: "#f59e0b" };
+  const btn = document.createElement("button");
+  btn.dataset.key = ref.key;
+  btn.className   = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+  applyToggleStyle(btn, stocksActiveKeys.has(ref.key), ref.color);
+  const dot = document.createElement("span");
+  dot.className = "w-2 h-2 rounded-full flex-shrink-0";
+  dot.style.background = ref.color;
+  btn.appendChild(dot);
+  btn.appendChild(document.createTextNode(ref.label));
+  btn.addEventListener("click", () => {
+    if (stocksActiveKeys.has(ref.key)) stocksActiveKeys.delete(ref.key);
+    else stocksActiveKeys.add(ref.key);
+    applyToggleStyle(btn, stocksActiveKeys.has(ref.key), ref.color);
+    renderStocksChart();
+    renderStocksStats(available);
+  });
+  container.appendChild(btn);
+}
+
+function renderStocksChart() {
+  if (!stocksChart || !DATA) return;
+  const strategies = DATA.strategies || {};
+  const startDate  = "2019-10-01";
+
+  function normalize(nav) {
+    if (!nav?.length) return [];
+    const idx = nav.findIndex(p => p.date >= startDate);
+    if (idx === -1) return [];
+    const base = nav[idx].value;
+    if (!base) return [];
+    return nav.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]);
+  }
+
+  const allKeys = [...STOCK_STRATS.map(s => s.key), "d1_accel"];
+  const series  = allKeys
+    .filter(k => stocksActiveKeys.has(k) && strategies[k])
+    .map(k => {
+      const c = SERIES_CFG[k] || {};
+      return {
+        name: c.label || k,
+        type: "line",
+        data: normalize(strategies[k].nav),
+        smooth: false, symbol: "none",
+        lineStyle: { color: c.color, width: c.width || 2 },
+        itemStyle: { color: c.color },
+      };
+    });
+
+  // Also add SPY benchmark if available
+  const spyBench = DATA.benchmarks?.["S&P 500"];
+  if (spyBench?.series) {
+    const c = SERIES_CFG["S&P 500"] || { color: "#f97316" };
+    series.push({
+      name: "S&P 500",
+      type: "line",
+      data: normalize(spyBench.series),
+      smooth: false, symbol: "none",
+      lineStyle: { color: c.color, width: 1.5, type: "dashed" },
+      itemStyle: { color: c.color },
+    });
+  }
+
+  stocksChart.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    grid:  { top: 24, left: 60, right: 20, bottom: 36 },
+    xAxis: { type: "time", min: startDate,
+             axisLabel: { color: "#8591b8", fontSize: 10 },
+             axisLine:  { lineStyle: { color: "#252a3d" } },
+             splitLine: { show: false } },
+    yAxis: { type: "value",
+             axisLabel: { color: "#8591b8", fontSize: 10, formatter: v => v.toFixed(0) },
+             axisLine:  { show: false },
+             splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
+             axisTick:  { show: false } },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "#1a1e2e",
+      borderColor:     "#252a3d",
+      textStyle:       { color: "#c9d1e0", fontSize: 11 },
+      formatter(params) {
+        if (!params?.length) return "";
+        const d = new Date(params[0].axisValue).toISOString().slice(0, 10);
+        const rows = params.map(p =>
+          `<div style="display:flex;justify-content:space-between;gap:20px">
+            <span style="color:${p.color}">${p.seriesName}</span>
+            <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
+          </div>`).join("");
+        return `<div style="font-size:11px"><div style="color:#8591b8;margin-bottom:4px">${d}</div>${rows}</div>`;
+      },
+    },
+    legend: { show: false },
+    series,
+  }, true);
+}
+
+function renderStocksSignalCards(available) {
+  const el = document.getElementById("stocks-signal-row");
+  if (!el) return;
+  const strategies = DATA?.strategies || {};
+
+  el.innerHTML = available.map(({ key, label, color }) => {
+    const strat = strategies[key];
+    if (!strat?.current_signal) return "";
+    const { date, holdings } = strat.current_signal;
+    const spec = STRATEGY_SPECS[key] || {};
+
+    const cashHolding = holdings?.find(h => h.ticker === "CASH" || h.ticker === "__CASH__");
+    if (cashHolding) {
+      return `<div class="bg-panel border border-border rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group">
+            <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+            <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+            <svg class="w-3 h-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+            </svg>
+          </button>
+          <span class="text-xs text-muted">${date}</span>
+        </div>
+        <p class="text-xs text-muted italic">Kontanter — regimfilter aktivt (SPY &lt; 0)</p>
+      </div>`;
+    }
+
+    const chips = (holdings || [])
+      .filter(h => h.ticker !== "CASH" && h.ticker !== "__CASH__")
+      .map(h => {
+        const c   = stockColorMap[h.ticker] || color;
+        const pct = Math.round(h.weight * 100);
+        return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+          <span class="text-xs font-mono font-medium text-slate-300">${h.ticker}</span>
+          <span class="text-xs text-muted">${pct}%</span>
+        </div>`;
+      }).join("");
+
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center justify-between mb-3">
+        <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group">
+          <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+          <svg class="w-3 h-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+          </svg>
+        </button>
+        <span class="text-xs text-muted">${date}</span>
+      </div>
+      ${chips || '<p class="text-xs text-muted italic">Inga innehav</p>'}
+    </div>`;
+  }).join("");
+}
+
+function renderStocksStats(available) {
+  const el = document.getElementById("stocks-stats");
+  if (!el) return;
+  const strategies = DATA?.strategies || {};
+
+  function pct(v, d = 1) {
+    return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
+  }
+  function colorVal(v) {
+    return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e";
+  }
+
+  // Reference ETF if toggled
+  const refStrats = stocksActiveKeys.has("d1_accel") && strategies["d1_accel"]
+    ? [{ key: "d1_accel", label: "D1-accel ETF (ref)", color: "#f59e0b" }]
+    : [];
+  const activeStrats = [...available.filter(s => stocksActiveKeys.has(s.key)), ...refStrats];
+
+  if (!activeStrats.length) { el.innerHTML = ""; return; }
+
+  function summaryCard({ key, label, color }) {
+    const st  = strategies[key]?.stats;
+    if (!st) return "";
+    const nav  = strategies[key]?.nav || [];
+    const period = nav.length
+      ? `<span class="text-xs text-muted ml-auto">${nav[0].date} → ${nav[nav.length-1].date}</span>` : "";
+    return `
+      <div class="bg-panel border border-border rounded-lg p-4">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group text-left">
+            <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+            <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+            <svg class="w-3 h-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+            </svg>
+          </button>
+          ${period}
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div><p class="text-xs text-muted mb-0.5">CAGR</p>
+            <p class="text-lg font-semibold" style="${colorVal(st.cagr)}">${pct(st.cagr)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
+            <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Max DD <span class="font-normal">(dag)</span></p>
+            <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.max_dd)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Max DD <span class="font-normal">(mån)</span></p>
+            <p class="text-lg font-semibold" style="color:#fb923c">${pct(st.max_dd_monthly)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
+            <p class="text-lg font-semibold text-slate-300">${pct(st.ann_vol)}</p></div>
+          <div><p class="text-xs text-muted mb-0.5">Total</p>
+            <p class="text-lg font-semibold" style="${colorVal(st.total)}">${pct(st.total)}</p></div>
+        </div>
+      </div>`;
+  }
+
+  // Annual table
+  const allYears = [...new Set(
+    activeStrats.flatMap(s => Object.keys(strategies[s.key]?.stats?.annual || {}))
+  )].sort();
+
+  function annualTable({ key, label, color }) {
+    const annual = strategies[key]?.stats?.annual || {};
+    const header = `<thead><tr>
+      <th class="text-left pb-2 pr-3 text-xs font-semibold" style="color:${color}">${label}</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Avk.</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Sharpe</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Max DD</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">DD mån</th>
+      <th class="text-right pb-2 pl-2 text-xs text-muted font-normal">Vol</th>
+    </tr></thead>`;
+    const rows = allYears.map(yr => {
+      const a = annual[yr];
+      return `<tr class="border-t border-border">
+        <td class="py-1.5 pr-3 text-xs text-slate-400">${yr}</td>
+        <td class="text-right py-1.5 px-2 text-xs font-medium tabular-nums" style="${colorVal(a?.ret)}">${pct(a?.ret)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums text-slate-300">${a?.sharpe != null ? a.sharpe.toFixed(2) : "—"}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#f43f5e">${pct(a?.max_dd)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums" style="color:#fb923c">${pct(a?.max_dd_mo)}</td>
+        <td class="text-right py-1.5 pl-2 text-xs tabular-nums text-slate-400">${pct(a?.vol)}</td>
+      </tr>`;
+    }).join("");
+    return `<table class="w-full border-collapse">${header}<tbody>${rows}</tbody></table>`;
+  }
+
+  // Monthly heatmap
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function heatCell(v) {
+    if (v == null) return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 text-muted">—</span></td>`;
+    const alpha = Math.min(Math.abs(v) / 0.08, 1);
+    const bg  = v >= 0 ? `rgba(16,185,129,${(alpha*.7).toFixed(2)})` : `rgba(244,63,94,${(alpha*.7).toFixed(2)})`;
+    const txt = v >= 0 ? "#6ee7b7" : "#fca5a5";
+    return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 tabular-nums" style="background:${bg};color:${txt}">${pct(v, 0)}</span></td>`;
+  }
+  function buildHeatmap({ key, label, color }) {
+    const monthly = strategies[key]?.stats?.monthly;
+    if (!monthly) return "";
+    const years = Object.keys(monthly).sort();
+    const header = `<tr><th class="text-left pb-1 pr-2 text-xs text-muted font-normal w-12"></th>
+      ${MONTHS.map(m => `<th class="text-center pb-1 px-0.5 text-xs text-muted font-normal">${m}</th>`).join("")}</tr>`;
+    const rows = years.map(yr => {
+      const cells = Array.from({length:12}, (_,i) => heatCell(monthly[yr]?.[String(i+1)]));
+      return `<tr><td class="pr-2 text-xs text-slate-400 py-0.5">${yr}</td>${cells.join("")}</tr>`;
+    }).join("");
+    return `<div>
+      <p class="text-xs font-semibold mb-2" style="color:${color}">${label} — monthly returns</p>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-max border-collapse text-xs">
+          <thead>${header}</thead><tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // Holdings history
+  function buildAllocHistory({ key, label, color }) {
+    const alloc = strategies[key]?.allocation;
+    if (!alloc?.dates?.length) return "";
+    const rows = [...alloc.dates].reverse().map((date, ri) => {
+      const origIdx  = alloc.dates.length - 1 - ri;
+      const row      = alloc.weights[origIdx];
+      const holdings = alloc.tickers
+        .map((t, i) => ({ t, w: row[i] }))
+        .filter(({ w }) => w > 0)
+        .sort((a, b) => b.w - a.w);
+      const chips = holdings.map(({ t, w }) => {
+        const c = t === "CASH" ? "#64748b" : (stockColorMap[t] || color);
+        return `<span style="background:${c}22;border:1px solid ${c}44;color:${c};border-radius:3px;padding:2px 7px;font-size:10px;display:inline-block;margin:1px 2px 1px 0;font-family:monospace">
+          ${t} <span style="opacity:.6">${Math.round(w*100)}%</span>
+        </span>`;
+      }).join("");
+      return `<tr class="border-b border-border/30 hover:bg-white/[0.015]">
+        <td class="py-1.5 pr-4 text-xs text-slate-500 tabular-nums whitespace-nowrap">${date}</td>
+        <td class="py-1.5">${chips}</td>
+      </tr>`;
+    }).join("");
+    return `<div>
+      <p class="text-xs font-semibold mb-2" style="color:${color}">${label} — ${alloc.dates.length} rebalanseringar</p>
+      <div class="overflow-y-auto" style="max-height:20rem">
+        <table class="w-full border-collapse"><tbody>${rows}</tbody></table>
+      </div>
+    </div>`;
+  }
+
+  const summaryCards = activeStrats.map(summaryCard).filter(Boolean);
+  let annualPairs = "";
+  for (let i = 0; i < activeStrats.length; i += 2) {
+    annualPairs += `<div class="grid grid-cols-1 xl:grid-cols-2 gap-6${i > 0 ? " mt-6" : ""}">
+      ${annualTable(activeStrats[i])}
+      ${activeStrats[i+1] ? annualTable(activeStrats[i+1]) : ""}
+    </div>`;
+  }
+  const heatmaps  = activeStrats.map(buildHeatmap).filter(Boolean);
+  const histories = activeStrats.map(s => buildAllocHistory(s)).filter(Boolean);
+
+  el.innerHTML = `<div class="space-y-5">
+    ${summaryCards.length ? `<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaryCards.join("")}</div>` : ""}
+    ${annualPairs ? `<div class="bg-panel border border-border rounded-lg p-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per år</p>
+      ${annualPairs}
+    </div>` : ""}
+    ${heatmaps.length ? `<div class="bg-panel border border-border rounded-lg p-4 space-y-8">${heatmaps.join("")}</div>` : ""}
+    ${histories.length ? `<div class="bg-panel border border-border rounded-lg p-4 space-y-6">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Historiska innehav</p>
+      ${histories.join('<div class="pt-2 border-t border-border/40"></div>')}
+    </div>` : ""}
+  </div>`;
 }
 
 // ── Settings ───────────────────────────────────────────────────────

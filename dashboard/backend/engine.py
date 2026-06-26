@@ -617,6 +617,17 @@ def run(cfg: dict = None, use_cache: bool = False):
     else:
         log.warning("ppm_engine module not available — skipping ppm_top3")
 
+    # ── S&P 500 point-in-time stock rotation ──────────────────────────
+    try:
+        from sp500_pit_engine import run_sp500_pit
+        sp500_results = run_sp500_pit(_DATA_DIR)
+        for k, v in sp500_results.items():
+            out["strategies"][k] = v
+        if sp500_results:
+            log.info("SP500 PIT: added %d strategies", len(sp500_results))
+    except Exception as e:
+        log.warning("SP500 PIT engine failed: %s", e)
+
     # ── Screening ─────────────────────────────────────────────────────
     if screening_cfg and screening_tickers:
         try:

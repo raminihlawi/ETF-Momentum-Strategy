@@ -51,6 +51,7 @@
     <button id="tab-funds"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('funds')">Fondmappning</button>
     <button id="tab-screen"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('screen')">Screening</button>
     <button id="tab-logs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('logs')">Loggar</button>
+    <button id="tab-stocks"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('stocks')">Aktier</button>
     <button id="tab-docs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('docs')">Dokumentation</button>
   </nav>
 </header>
@@ -154,6 +155,33 @@
     </div>
   </div>
   <div id="screen-table"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     STOCKS VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-stocks" class="hidden px-6 py-5 space-y-5">
+
+  <!-- Header + variant toggles -->
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300">Aktierotation — D1-ACCEL S&amp;P 500</h2>
+      <p class="text-xs text-muted mt-0.5">Point-in-time universum · 30 bps kostnad · SPY 84d regimgate · månatlig rebalansering</p>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="stocks-toggles"></div>
+  </div>
+
+  <!-- Equity chart -->
+  <div class="bg-panel border border-border rounded-lg">
+    <div id="stocks-chart" class="w-full" style="height:420px;"></div>
+  </div>
+
+  <!-- Current holdings row -->
+  <div id="stocks-signal-row" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
+
+  <!-- Stats (summary cards + annual + heatmap + history) -->
+  <div id="stocks-stats"></div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════
