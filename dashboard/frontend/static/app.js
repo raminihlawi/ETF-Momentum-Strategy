@@ -168,6 +168,36 @@ const STRATEGY_SPECS = {
     ],
     source: "Bäst i sweep. Sharpe 0.99 · CAGR +27% · Max DD −26%",
   },
+  omxs_top3: {
+    color: "#818cf8",
+    tagline: "D1-ACCEL OMX Stockholm — Top 3 (cross-market validation)",
+    description: "Samma accelerated-momentum-mekanik på OMX Stockholm Large+Mid Cap. Oberoende marknad — om mönstret håller här är strategin inte US-specifik. UNVALIDATED: survivorship bias (nuvarande constituents), accepterat för snabbtest.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~120 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 3 aktier, likviktade (33% var)" },
+      { k: "Regimfilter",   v: "OMXS30 84d return ≤ 0 → 100% kontanter" },
+      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — quick cross-market test" },
+    ],
+    source: "Cross-market replication test. Survivorship bias, ej bias-korrigerad.",
+  },
+  omxs_top5: {
+    color: "#a78bfa",
+    tagline: "D1-ACCEL OMX Stockholm — Top 5 (cross-market validation)",
+    description: "Top-5 variant på OMXS. Ger mer diversifiering i ett universum med ~120 aktier (5/120 ≈ 4.2% universum täckt). Jämför Sharpe/CAGR med S&P 500-resultaten för att avgöra om impulsen är marknadsoberoende.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~120 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 5 aktier, likviktade (20% var)" },
+      { k: "Regimfilter",   v: "OMXS30 84d return ≤ 0 → 100% kontanter" },
+      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — quick cross-market test" },
+    ],
+    source: "Cross-market replication test. Survivorship bias, ej bias-korrigerad.",
+  },
   sp500_pit_top10: {
     color: "#6ee7b7",
     tagline: "D1-ACCEL S&P 500-aktier — Top 10, bredare diversifiering",
@@ -199,6 +229,8 @@ const SERIES_CFG = {
   sp500_pit_top5:     { label: "Aktier — Top 5",    color: "#34d399", width: 2.5 },
   sp500_pit_top7:     { label: "Aktier — Top 7",    color: "#10b981", width: 2.5 },
   sp500_pit_top10:    { label: "Aktier — Top 10",   color: "#6ee7b7", width: 2.0 },
+  omxs_top3:          { label: "OMXS — Top 3",      color: "#818cf8", width: 2.5 },
+  omxs_top5:          { label: "OMXS — Top 5",      color: "#a78bfa", width: 2.0 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
@@ -228,6 +260,7 @@ function _saveActiveKeys() {
 let activeKeys = _loadActiveKeys();
 let mainChart   = null;
 let stocksChart = null;
+let omxsChart   = null;
 let tickerColorMap = {};
 let ppmColorMap    = {};
 let stockColorMap  = {};
@@ -236,14 +269,15 @@ let stockColorMap  = {};
 document.addEventListener("DOMContentLoaded", async () => {
   mainChart   = echarts.init(document.getElementById("main-chart"),   null, { renderer: "canvas" });
   stocksChart = echarts.init(document.getElementById("stocks-chart"), null, { renderer: "canvas" });
-  window.addEventListener("resize", () => { mainChart?.resize(); stocksChart?.resize(); });
+  omxsChart   = echarts.init(document.getElementById("omxs-chart"),   null, { renderer: "canvas" });
+  window.addEventListener("resize", () => { mainChart?.resize(); stocksChart?.resize(); omxsChart?.resize(); });
   document.getElementById("start-date").addEventListener("change", () => { if (DATA) renderMainChart(); });
   await loadData();
 });
 
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(tab) {
-  const views = ["dashboard", "settings", "funds", "screen", "stocks", "logs", "docs"];
+  const views = ["dashboard", "settings", "funds", "screen", "stocks", "omxs", "logs", "docs"];
   views.forEach(v => document.getElementById("view-" + v)?.classList.toggle("hidden", tab !== v));
   views.forEach(v => {
     const el = document.getElementById("tab-" + v);
@@ -254,6 +288,7 @@ function switchTab(tab) {
   if (tab === "logs")     renderLogs();
   if (tab === "docs")     renderDocs();
   if (tab === "stocks")   renderStocksPage();
+  if (tab === "omxs")     renderOMXSPage();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -1402,6 +1437,304 @@ function renderStocksStats(available) {
       <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Historiska innehav</p>
       ${histories.join('<div class="pt-2 border-t border-border/40"></div>')}
     </div>` : ""}
+  </div>`;
+}
+
+// ── OMXS page ──────────────────────────────────────────────────────
+const OMXS_STRATS = [
+  { key: "omxs_top3", label: "OMXS — Top 3", color: "#818cf8" },
+  { key: "omxs_top5", label: "OMXS — Top 5", color: "#a78bfa" },
+];
+
+let omxsActiveKeys = new Set(["omxs_top3", "omxs_top5", "d1_accel"]);
+let omxsColorMap   = {};
+
+function renderOMXSPage() {
+  if (!DATA) return;
+  const strategies = DATA.strategies || {};
+  const available  = OMXS_STRATS.filter(s => strategies[s.key]);
+
+  if (!available.length) {
+    document.getElementById("omxs-stats").innerHTML =
+      `<div class="bg-amber-900/20 border border-amber-700/40 rounded-lg p-4 text-xs text-amber-300">
+        Ingen OMXS-data tillgänglig. Kör <code>python d1_accel_omxs.py</code> och starta om engine.
+       </div>`;
+    return;
+  }
+
+  // Build omxsColorMap
+  omxsColorMap = {};
+  let idx = 0;
+  const PALETTE = ["#818cf8","#a78bfa","#c4b5fd","#38bdf8","#7dd3fc",
+                   "#34d399","#6ee7b7","#f59e0b","#fcd34d","#f43f5e","#fb7185","#64748b"];
+  for (const s of available) {
+    const alloc = strategies[s.key]?.allocation;
+    if (!alloc?.tickers) continue;
+    alloc.tickers.forEach((t, i) => {
+      if (!(t in omxsColorMap) && t !== "CASH" && alloc.weights.some(row => row[i] > 0))
+        omxsColorMap[t] = PALETTE[idx++ % PALETTE.length];
+    });
+  }
+
+  _buildOMXSToggles(available);
+  _renderOMXSChart();
+  _renderOMXSHoldings(available);
+  _renderOMXSStats(available);
+}
+
+function _buildOMXSToggles(available) {
+  const el = document.getElementById("omxs-toggles");
+  if (!el) return;
+  el.innerHTML = "";
+  [...available, { key: "d1_accel", label: "D1-accel ETF (ref)", color: "#f59e0b" }].forEach(({ key, label, color }) => {
+    const on  = omxsActiveKeys.has(key);
+    const btn = document.createElement("button");
+    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+    applyToggleStyle(btn, on, color);
+    const dot = document.createElement("span");
+    dot.className = "w-2 h-2 rounded-full flex-shrink-0";
+    dot.style.background = color;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(label));
+    btn.addEventListener("click", () => {
+      if (omxsActiveKeys.has(key)) omxsActiveKeys.delete(key);
+      else omxsActiveKeys.add(key);
+      applyToggleStyle(btn, omxsActiveKeys.has(key), color);
+      _renderOMXSChart();
+      _renderOMXSStats(available);
+    });
+    el.appendChild(btn);
+  });
+}
+
+function _renderOMXSChart() {
+  if (!omxsChart || !DATA) return;
+  const strategies = DATA.strategies || {};
+  const startDate  = "2019-10-01";
+
+  function normalize(nav) {
+    if (!nav?.length) return [];
+    const idx = nav.findIndex(p => p.date >= startDate);
+    if (idx === -1) return [];
+    const base = nav[idx].value;
+    return base ? nav.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]) : [];
+  }
+
+  const keys = [...OMXS_STRATS.map(s => s.key), "d1_accel"];
+  const series = keys
+    .filter(k => omxsActiveKeys.has(k) && strategies[k])
+    .map(k => {
+      const c = SERIES_CFG[k] || {};
+      return { name: c.label || k, type: "line", data: normalize(strategies[k].nav),
+               smooth: false, symbol: "none",
+               lineStyle: { color: c.color, width: c.width || 2 },
+               itemStyle: { color: c.color } };
+    });
+
+  // OMXS30 benchmark
+  const bm = DATA.benchmarks?.["OMXS30"];
+  if (bm?.series) {
+    const c = SERIES_CFG["OMXS30"] || { color: "#38bdf8" };
+    series.push({ name: "OMXS30", type: "line",
+                  data: normalize(bm.series), smooth: false, symbol: "none",
+                  lineStyle: { color: c.color, width: 1.5, type: "dashed" },
+                  itemStyle: { color: c.color } });
+  }
+
+  omxsChart.setOption({
+    backgroundColor: "transparent", animation: false,
+    grid:  { top: 24, left: 60, right: 20, bottom: 36 },
+    xAxis: { type: "time", min: startDate,
+             axisLabel: { color: "#8591b8", fontSize: 10 },
+             axisLine:  { lineStyle: { color: "#252a3d" } },
+             splitLine: { show: false } },
+    yAxis: { type: "value",
+             axisLabel: { color: "#8591b8", fontSize: 10, formatter: v => v.toFixed(0) },
+             axisLine:  { show: false },
+             splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
+             axisTick:  { show: false } },
+    tooltip: {
+      trigger: "axis", backgroundColor: "#1a1e2e",
+      borderColor: "#252a3d", textStyle: { color: "#c9d1e0", fontSize: 11 },
+      formatter(params) {
+        if (!params?.length) return "";
+        const d = new Date(params[0].axisValue).toISOString().slice(0, 10);
+        const rows = params.map(p =>
+          `<div style="display:flex;justify-content:space-between;gap:20px">
+            <span style="color:${p.color}">${p.seriesName}</span>
+            <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
+           </div>`).join("");
+        return `<div style="font-size:11px"><div style="color:#8591b8;margin-bottom:4px">${d}</div>${rows}</div>`;
+      },
+    },
+    legend: { show: false }, series,
+  }, true);
+}
+
+function _renderOMXSHoldings(available) {
+  const el = document.getElementById("omxs-signal-row");
+  if (!el) return;
+  const strategies = DATA?.strategies || {};
+  el.innerHTML = available.map(({ key, label, color }) => {
+    const cs = strategies[key]?.current_signal;
+    if (!cs) return "";
+    const cashHolding = cs.holdings?.find(h => h.ticker === "CASH" || h.ticker === "__CASH__");
+    if (cashHolding) {
+      return `<div class="bg-panel border border-border rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group">
+            <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+            <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+          </button>
+          <span class="text-xs text-muted">${cs.date}</span>
+        </div>
+        <p class="text-xs text-muted italic">Kontanter — regimfilter aktivt (OMXS30 &lt; 0)</p>
+      </div>`;
+    }
+    const chips = (cs.holdings || [])
+      .filter(h => h.ticker !== "CASH")
+      .map(h => {
+        const c   = omxsColorMap[h.ticker] || color;
+        const pct = Math.round(h.weight * 100);
+        return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+          <span class="text-xs font-mono font-medium text-slate-300">${h.ticker.replace(".ST","")}</span>
+          <span class="text-xs text-muted">${pct}%</span>
+        </div>`;
+      }).join("");
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center justify-between mb-3">
+        <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group">
+          <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+          <svg class="w-3 h-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+          </svg>
+        </button>
+        <span class="text-xs text-muted">${cs.date}</span>
+      </div>
+      <div class="mb-2 px-1 py-1 bg-amber-900/20 border border-amber-700/30 rounded text-xs text-amber-400">
+        ⚠ UNVALIDATED — survivorship bias present
+      </div>
+      ${chips || '<p class="text-xs text-muted italic">Inga innehav</p>'}
+    </div>`;
+  }).join("");
+}
+
+function _renderOMXSStats(available) {
+  const el = document.getElementById("omxs-stats");
+  if (!el) return;
+  const strategies = DATA?.strategies || {};
+
+  function pct(v, d = 1) {
+    return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
+  }
+  function colorVal(v) {
+    return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e";
+  }
+
+  const refStrats = omxsActiveKeys.has("d1_accel") && strategies["d1_accel"]
+    ? [{ key: "d1_accel", label: "D1-accel ETF (ref)", color: "#f59e0b" }] : [];
+  const activeStrats = [...available.filter(s => omxsActiveKeys.has(s.key)), ...refStrats];
+  if (!activeStrats.length) { el.innerHTML = ""; return; }
+
+  function summaryCard({ key, label, color }) {
+    const st = strategies[key]?.stats;
+    if (!st) return "";
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center gap-2 mb-3 flex-wrap">
+        <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group text-left">
+          <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+          <svg class="w-3 h-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+          </svg>
+        </button>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div><p class="text-xs text-muted mb-0.5">CAGR</p>
+          <p class="text-lg font-semibold" style="${colorVal(st.cagr)}">${pct(st.cagr)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
+          <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Max DD</p>
+          <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.max_dd)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
+          <p class="text-lg font-semibold text-slate-300">${pct(st.ann_vol)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Total</p>
+          <p class="text-lg font-semibold" style="${colorVal(st.total)}">${pct(st.total)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Sharpe (ref S&amp;P)</p>
+          <p class="text-lg font-semibold" style="color:#f59e0b">${(strategies["sp500_pit_top7"]?.stats?.sharpe ?? 0).toFixed(2)}</p></div>
+      </div>
+    </div>`;
+  }
+
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function heatCell(v) {
+    if (v == null) return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 text-muted">—</span></td>`;
+    const alpha = Math.min(Math.abs(v)/0.08, 1);
+    const bg = v>=0 ? `rgba(16,185,129,${(alpha*.7).toFixed(2)})` : `rgba(244,63,94,${(alpha*.7).toFixed(2)})`;
+    const txt = v>=0 ? "#6ee7b7" : "#fca5a5";
+    return `<td class="text-center p-0.5"><span class="block w-full h-6 rounded text-xs leading-6 tabular-nums" style="background:${bg};color:${txt}">${pct(v,0)}</span></td>`;
+  }
+  function heatmap({ key, label, color }) {
+    const mo = strategies[key]?.stats?.monthly;
+    if (!mo) return "";
+    const years = Object.keys(mo).sort();
+    const header = `<tr><th class="text-left pb-1 pr-2 text-xs text-muted font-normal w-12"></th>
+      ${MONTHS.map(m=>`<th class="text-center pb-1 px-0.5 text-xs text-muted font-normal">${m}</th>`).join("")}</tr>`;
+    const rows = years.map(yr => {
+      const cells = Array.from({length:12},(_,i)=>heatCell(mo[yr]?.[String(i+1)]));
+      return `<tr><td class="pr-2 text-xs text-slate-400 py-0.5">${yr}</td>${cells.join("")}</tr>`;
+    }).join("");
+    return `<div><p class="text-xs font-semibold mb-2" style="color:${color}">${label}</p>
+      <div class="overflow-x-auto"><table class="w-full min-w-max border-collapse text-xs">
+        <thead>${header}</thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+
+  function annualTable({ key, label, color }) {
+    const annual = strategies[key]?.stats?.annual || {};
+    const years  = Object.keys(annual).sort();
+    const header = `<thead><tr>
+      <th class="text-left pb-2 pr-3 text-xs font-semibold" style="color:${color}">${label}</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Avk.</th>
+      <th class="text-right pb-2 px-2 text-xs text-muted font-normal">Sharpe</th>
+      <th class="text-right pb-2 pl-2 text-xs text-muted font-normal">Max DD</th>
+    </tr></thead>`;
+    const rows = years.map(yr => {
+      const a = annual[yr];
+      return `<tr class="border-t border-border">
+        <td class="py-1.5 pr-3 text-xs text-slate-400">${yr}</td>
+        <td class="text-right py-1.5 px-2 text-xs font-medium tabular-nums" style="${colorVal(a?.ret)}">${pct(a?.ret)}</td>
+        <td class="text-right py-1.5 px-2 text-xs tabular-nums text-slate-300">${a?.sharpe != null ? a.sharpe.toFixed(2) : "—"}</td>
+        <td class="text-right py-1.5 pl-2 text-xs tabular-nums" style="color:#f43f5e">${pct(a?.max_dd)}</td>
+      </tr>`;
+    }).join("");
+    return `<table class="w-full border-collapse">${header}<tbody>${rows}</tbody></table>`;
+  }
+
+  const summaries = activeStrats.map(summaryCard).filter(Boolean);
+  const heatmaps  = available.filter(s => omxsActiveKeys.has(s.key)).map(heatmap).filter(Boolean);
+  let annualPairs = "";
+  for (let i = 0; i < activeStrats.length; i += 2) {
+    annualPairs += `<div class="grid grid-cols-1 xl:grid-cols-2 gap-6${i>0?" mt-6":""}">
+      ${annualTable(activeStrats[i])}${activeStrats[i+1] ? annualTable(activeStrats[i+1]) : ""}
+    </div>`;
+  }
+
+  // Correlation note
+  const corrNote = `<div class="bg-panel border border-amber-700/30 rounded-lg p-4">
+    <p class="text-xs font-semibold text-amber-400 mb-2">Korrelation med US-strategier (dagliga avkastningar)</p>
+    <p class="text-xs text-muted">OMXS Top-5 ↔ D1-accel ETF: ~0.27 &nbsp;|&nbsp; OMXS Top-5 ↔ S&amp;P Top-7: ~0.19</p>
+    <p class="text-xs text-slate-500 mt-1">Låg korrelation = diversifieringspotential, men svag replikering av US-mönstret på OMXS.</p>
+  </div>`;
+
+  el.innerHTML = `<div class="space-y-5">
+    ${summaries.length ? `<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaries.join("")}</div>` : ""}
+    ${corrNote}
+    ${annualPairs ? `<div class="bg-panel border border-border rounded-lg p-4">
+      <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per år</p>
+      ${annualPairs}
+    </div>` : ""}
+    ${heatmaps.length ? `<div class="bg-panel border border-border rounded-lg p-4 space-y-8">${heatmaps.join("")}</div>` : ""}
   </div>`;
 }
 

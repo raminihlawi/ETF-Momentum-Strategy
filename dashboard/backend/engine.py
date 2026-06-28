@@ -628,6 +628,17 @@ def run(cfg: dict = None, use_cache: bool = False):
     except Exception as e:
         log.warning("SP500 PIT engine failed: %s", e)
 
+    # ── OMXS cross-market validation ──────────────────────────────────
+    try:
+        from omxs_engine import run_omxs
+        omxs_results = run_omxs(_DATA_DIR)
+        for k, v in omxs_results.items():
+            out["strategies"][k] = v
+        if omxs_results:
+            log.info("OMXS: added %d strategies", len(omxs_results))
+    except Exception as e:
+        log.warning("OMXS engine failed: %s", e)
+
     # ── Screening ─────────────────────────────────────────────────────
     if screening_cfg and screening_tickers:
         try:

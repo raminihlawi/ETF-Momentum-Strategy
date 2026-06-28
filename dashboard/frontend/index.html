@@ -52,6 +52,7 @@
     <button id="tab-screen"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('screen')">Screening</button>
     <button id="tab-logs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('logs')">Loggar</button>
     <button id="tab-stocks"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('stocks')">Aktier</button>
+    <button id="tab-omxs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('omxs')">OMXS</button>
     <button id="tab-docs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('docs')">Dokumentation</button>
   </nav>
 </header>
@@ -181,6 +182,36 @@
 
   <!-- Stats (summary cards + annual + heatmap + history) -->
   <div id="stocks-stats"></div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     OMXS VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-omxs" class="hidden px-6 py-5 space-y-5">
+
+  <!-- Header + toggles -->
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300">Aktierotation — OMX Stockholm (cross-market validation)</h2>
+      <p class="text-xs text-muted mt-0.5">
+        Samma D1-ACCEL-mekanik på OMXS Large+Mid Cap · N=3 &amp; N=5 · lb=63 win=10 ema=8 · 30 bps ·
+        OMXS30 regimgate · <span class="text-amber-400 font-medium">UNVALIDATED — survivorship bias</span>
+      </p>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="omxs-toggles"></div>
+  </div>
+
+  <!-- Equity chart -->
+  <div class="bg-panel border border-border rounded-lg">
+    <div id="omxs-chart" class="w-full" style="height:420px;"></div>
+  </div>
+
+  <!-- Current holdings row -->
+  <div id="omxs-signal-row" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
+
+  <!-- Stats -->
+  <div id="omxs-stats"></div>
 
 </div>
 
