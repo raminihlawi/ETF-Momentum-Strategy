@@ -168,35 +168,105 @@ const STRATEGY_SPECS = {
     ],
     source: "Bäst i sweep. Sharpe 0.99 · CAGR +27% · Max DD −26%",
   },
-  omxs_top3: {
-    color: "#818cf8",
-    tagline: "D1-ACCEL OMX Stockholm — Top 3 (cross-market validation)",
-    description: "Samma accelerated-momentum-mekanik på OMX Stockholm Large+Mid Cap. Oberoende marknad — om mönstret håller här är strategin inte US-specifik. UNVALIDATED: survivorship bias (nuvarande constituents), accepterat för snabbtest.",
+  // ── OMXS gate-comparison variants ────────────────────────────────
+  no_gate_top3: {
+    color: "#8b5cf6",
+    tagline: "OMXS — Top 3, ingen gate (ren rotation)",
+    description: "Ren D1-ACCEL rotation på OMXS utan regime-filter. Isolerar mekanikens edge — om Sharpe är låg här är problemet mönstret självt, inte gaten. Sharpe +0.21 (vs US Top-7 ~1.08). UNVALIDATED.",
     params: [
       { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
-      { k: "Universum",     v: "OMXS Large+Mid Cap (~120 tickers, survivorship-biased)" },
-      { k: "Urval",         v: "Top 3 aktier, likviktade (33% var)" },
-      { k: "Regimfilter",   v: "OMXS30 84d return ≤ 0 → 100% kontanter" },
-      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~75 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 3 aktier, likviktade" },
+      { k: "Regimfilter",   v: "Ingen — ren rotation" },
       { k: "Handelskostnad",v: "30 bps per sida" },
-      { k: "Status",        v: "⚠ UNVALIDATED — quick cross-market test" },
+      { k: "Status",        v: "⚠ UNVALIDATED — survivorship bias" },
     ],
-    source: "Cross-market replication test. Survivorship bias, ej bias-korrigerad.",
+    source: "Gate-comparison. Sharpe +0.21 · CAGR +1.8% · MaxDD −55.5% · 2022: −38.8%",
+  },
+  no_gate_top5: {
+    color: "#7c3aed",
+    tagline: "OMXS — Top 5, ingen gate (ren rotation)",
+    description: "Top-5 variant utan gate. Sharpe +0.08, CAGR −1.5%. Svag edge på OMXS även utan gate-overhead.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~75 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 5 aktier, likviktade" },
+      { k: "Regimfilter",   v: "Ingen — ren rotation" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — survivorship bias" },
+    ],
+    source: "Gate-comparison. Sharpe +0.08 · CAGR −1.5% · MaxDD −60.8% · 2022: −39.9%",
+  },
+  spy_gate_top3: {
+    color: "#10b981",
+    tagline: "OMXS — Top 3, SPY-gate (US-regime)",
+    description: "SPY 84d return ≤ 0 → kontanter. Minskar MaxDD till −43.7% (från −55.5%), men lägre Sharpe (0.16) eftersom gaten missar uppgångar och skyddar mot drawdowns i fel timing.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~75 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 3 aktier, likviktade" },
+      { k: "Regimfilter",   v: "SPY 84d return ≤ 0 → 100% kontanter" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — survivorship bias" },
+    ],
+    source: "Gate-comparison. Sharpe +0.16 · CAGR +0.8% · MaxDD −43.7% · 2022: −19.9%",
+  },
+  spy_gate_top5: {
+    color: "#059669",
+    tagline: "OMXS — Top 5, SPY-gate (US-regime)",
+    description: "SPY-gate på Top-5. Sharpe 0.10 — marginellt bättre än no-gate (0.08) för Top-5. Skyddade 2022 (−23.7% vs −39.9%) men försämrade 2020 och 2023.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~75 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 5 aktier, likviktade" },
+      { k: "Regimfilter",   v: "SPY 84d return ≤ 0 → 100% kontanter" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — survivorship bias" },
+    ],
+    source: "Gate-comparison. Sharpe +0.10 · CAGR −0.3% · MaxDD −51.1% · 2022: −23.7%",
+  },
+  omxs_gate_top3: {
+    color: "#3b82f6",
+    tagline: "OMXS — Top 3, lokal XACT-OMXS30 gate",
+    description: "XACT-OMXS30 84d return ≤ 0 → kontanter (lokalt regimfilter). Mest aktiv gate (24 kontantmånader), men SÄMST Sharpe (0.03) — filtrar bort för mycket av den positiva avkastningen.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~75 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 3 aktier, likviktade" },
+      { k: "Regimfilter",   v: "XACT-OMXS30 84d return ≤ 0 → 100% kontanter (lokalt)" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — survivorship bias" },
+    ],
+    source: "Gate-comparison. Sharpe +0.03 · CAGR −1.8% · MaxDD −42.5% · 2022: −16.0%",
+  },
+  omxs_gate_top5: {
+    color: "#2563eb",
+    tagline: "OMXS — Top 5, lokal XACT-OMXS30 gate",
+    description: "Lokal XACT-OMXS30 gate på Top-5. Sämst av alla varianter (Sharpe 0.01, CAGR −1.8%). Lokal gate är för restriktiv — filtrar bort uppgångsmånader mer än den skyddar mot nedgång.",
+    params: [
+      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
+      { k: "Universum",     v: "OMXS Large+Mid Cap (~75 tickers, survivorship-biased)" },
+      { k: "Urval",         v: "Top 5 aktier, likviktade" },
+      { k: "Regimfilter",   v: "XACT-OMXS30 84d return ≤ 0 → 100% kontanter (lokalt)" },
+      { k: "Handelskostnad",v: "30 bps per sida" },
+      { k: "Status",        v: "⚠ UNVALIDATED — survivorship bias" },
+    ],
+    source: "Gate-comparison. Sharpe +0.01 · CAGR −1.8% · MaxDD −45.3% · 2022: −21.7%",
+  },
+  // Legacy aliases (when omxs_results.json is loaded instead of gates file)
+  omxs_top3: {
+    color: "#818cf8",
+    tagline: "D1-ACCEL OMX Stockholm — Top 3 (legacy)",
+    description: "Legacy OMXS Top-3 result (broken OMXS30 gate = effectively no gate). Ersatt av gate-comparison variants.",
+    params: [{ k: "Status", v: "Legacy — se gate-comparison variants" }],
+    source: "Legacy result.",
   },
   omxs_top5: {
     color: "#a78bfa",
-    tagline: "D1-ACCEL OMX Stockholm — Top 5 (cross-market validation)",
-    description: "Top-5 variant på OMXS. Ger mer diversifiering i ett universum med ~120 aktier (5/120 ≈ 4.2% universum täckt). Jämför Sharpe/CAGR med S&P 500-resultaten för att avgöra om impulsen är marknadsoberoende.",
-    params: [
-      { k: "Signal",        v: "ROC(63d) + Accel(10d) på EMA(8) av (H+L)/2" },
-      { k: "Universum",     v: "OMXS Large+Mid Cap (~120 tickers, survivorship-biased)" },
-      { k: "Urval",         v: "Top 5 aktier, likviktade (20% var)" },
-      { k: "Regimfilter",   v: "OMXS30 84d return ≤ 0 → 100% kontanter" },
-      { k: "Rebalansering", v: "Sista handelsdagen varje månad" },
-      { k: "Handelskostnad",v: "30 bps per sida" },
-      { k: "Status",        v: "⚠ UNVALIDATED — quick cross-market test" },
-    ],
-    source: "Cross-market replication test. Survivorship bias, ej bias-korrigerad.",
+    tagline: "D1-ACCEL OMX Stockholm — Top 5 (legacy)",
+    description: "Legacy OMXS Top-5 result. Ersatt av gate-comparison variants.",
+    params: [{ k: "Status", v: "Legacy — se gate-comparison variants" }],
+    source: "Legacy result.",
   },
   sp500_pit_top10: {
     color: "#6ee7b7",
@@ -229,6 +299,12 @@ const SERIES_CFG = {
   sp500_pit_top5:     { label: "Aktier — Top 5",    color: "#34d399", width: 2.5 },
   sp500_pit_top7:     { label: "Aktier — Top 7",    color: "#10b981", width: 2.5 },
   sp500_pit_top10:    { label: "Aktier — Top 10",   color: "#6ee7b7", width: 2.0 },
+  no_gate_top3:       { label: "OMXS No gate — Top 3",   color: "#8b5cf6", width: 2.5 },
+  no_gate_top5:       { label: "OMXS No gate — Top 5",   color: "#7c3aed", width: 2.0 },
+  spy_gate_top3:      { label: "OMXS SPY gate — Top 3",  color: "#10b981", width: 2.5 },
+  spy_gate_top5:      { label: "OMXS SPY gate — Top 5",  color: "#059669", width: 2.0 },
+  omxs_gate_top3:     { label: "OMXS local gate — Top 3",color: "#3b82f6", width: 2.5 },
+  omxs_gate_top5:     { label: "OMXS local gate — Top 5",color: "#2563eb", width: 2.0 },
   omxs_top3:          { label: "OMXS — Top 3",      color: "#818cf8", width: 2.5 },
   omxs_top5:          { label: "OMXS — Top 5",      color: "#a78bfa", width: 2.0 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
@@ -1441,23 +1517,36 @@ function renderStocksStats(available) {
 }
 
 // ── OMXS page ──────────────────────────────────────────────────────
-const OMXS_STRATS = [
-  { key: "omxs_top3", label: "OMXS — Top 3", color: "#818cf8" },
-  { key: "omxs_top5", label: "OMXS — Top 5", color: "#a78bfa" },
+// Gate-comparison variants (preferred when omxs_gates_results.json is loaded)
+const OMXS_GATE_STRATS = [
+  { key: "no_gate_top3",   label: "No gate — Top 3",         color: "#8b5cf6", group: "no_gate"   },
+  { key: "no_gate_top5",   label: "No gate — Top 5",         color: "#7c3aed", group: "no_gate"   },
+  { key: "spy_gate_top3",  label: "SPY gate — Top 3",        color: "#10b981", group: "spy_gate"  },
+  { key: "spy_gate_top5",  label: "SPY gate — Top 5",        color: "#059669", group: "spy_gate"  },
+  { key: "omxs_gate_top3", label: "OMXS-local gate — Top 3", color: "#3b82f6", group: "omxs_gate" },
+  { key: "omxs_gate_top5", label: "OMXS-local gate — Top 5", color: "#2563eb", group: "omxs_gate" },
 ];
+const OMXS_LEGACY_STRATS = [
+  { key: "omxs_top3", label: "OMXS — Top 3", color: "#818cf8", group: "legacy" },
+  { key: "omxs_top5", label: "OMXS — Top 5", color: "#a78bfa", group: "legacy" },
+];
+function _getOMXSStrats(strategies) {
+  return OMXS_GATE_STRATS.some(s => strategies[s.key]) ? OMXS_GATE_STRATS : OMXS_LEGACY_STRATS;
+}
 
-let omxsActiveKeys = new Set(["omxs_top3", "omxs_top5", "d1_accel"]);
+let omxsActiveKeys = new Set(["no_gate_top3", "spy_gate_top3", "omxs_gate_top3", "omxs_top3", "d1_accel"]);
 let omxsColorMap   = {};
 
 function renderOMXSPage() {
   if (!DATA) return;
   const strategies = DATA.strategies || {};
+  const OMXS_STRATS = _getOMXSStrats(strategies);
   const available  = OMXS_STRATS.filter(s => strategies[s.key]);
 
   if (!available.length) {
     document.getElementById("omxs-stats").innerHTML =
       `<div class="bg-amber-900/20 border border-amber-700/40 rounded-lg p-4 text-xs text-amber-300">
-        Ingen OMXS-data tillgänglig. Kör <code>python d1_accel_omxs.py</code> och starta om engine.
+        Ingen OMXS-data tillgänglig. Kör <code>python d1_accel_omxs_gates.py</code> och starta om engine.
        </div>`;
     return;
   }
@@ -1520,8 +1609,8 @@ function _renderOMXSChart() {
     return base ? nav.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]) : [];
   }
 
-  const keys = [...OMXS_STRATS.map(s => s.key), "d1_accel"];
-  const series = keys
+  const allOMXSKeys = [...OMXS_GATE_STRATS.map(s => s.key), ...OMXS_LEGACY_STRATS.map(s => s.key), "d1_accel"];
+  const series = allOMXSKeys
     .filter(k => omxsActiveKeys.has(k) && strategies[k])
     .map(k => {
       const c = SERIES_CFG[k] || {};
@@ -1720,12 +1809,65 @@ function _renderOMXSStats(available) {
     </div>`;
   }
 
-  // Correlation note
-  const corrNote = `<div class="bg-panel border border-amber-700/30 rounded-lg p-4">
+  // Gate-comparison verdict panel (shown when gate-comparison data is loaded)
+  const hasGateData = strategies["no_gate_top3"] || strategies["spy_gate_top3"] || strategies["omxs_gate_top3"];
+  const gateVerdict = hasGateData ? (() => {
+    const ng = strategies["no_gate_top5"]?.stats  || {};
+    const sp = strategies["spy_gate_top5"]?.stats  || {};
+    const om = strategies["omxs_gate_top5"]?.stats || {};
+    const p  = v => v != null ? `${v >= 0 ? "+" : ""}${(v*100).toFixed(1)}%` : "—";
+    const ngCash22 = (strategies["no_gate_top5"]?.meta?.cash_months||[]).filter(m=>m.startsWith("2022")).length;
+    const spCash22 = (strategies["spy_gate_top5"]?.meta?.cash_months||[]).filter(m=>m.startsWith("2022")).length;
+    const omCash22 = (strategies["omxs_gate_top5"]?.meta?.cash_months||[]).filter(m=>m.startsWith("2022")).length;
+    const ng22 = strategies["no_gate_top5"]?.stats?.annual?.["2022"]?.ret;
+    const sp22 = strategies["spy_gate_top5"]?.stats?.annual?.["2022"]?.ret;
+    const om22 = strategies["omxs_gate_top5"]?.stats?.annual?.["2022"]?.ret;
+
+    const mechanicEdge = (ng.sharpe || 0) >= 0.4
+      ? `<span class="text-green-400">Viss edge</span> utan gate (Sharpe ${ng.sharpe?.toFixed(2)})`
+      : `<span class="text-amber-400">Svag/ingen edge</span> utan gate (Sharpe ${ng.sharpe?.toFixed(2) || "—"})`;
+
+    const gateCompare = (sp.sharpe || 0) > (om.sharpe || 0) + 0.05
+      ? `SPY-gate ger bättre Sharpe än lokal gate (${sp.sharpe?.toFixed(2)} vs ${om.sharpe?.toFixed(2)}).`
+      : (om.sharpe || 0) > (sp.sharpe || 0) + 0.05
+        ? `Lokal XACT-gate ger bättre Sharpe (${om.sharpe?.toFixed(2)} vs SPY ${sp.sharpe?.toFixed(2)}).`
+        : `SPY-gate och lokal gate ger liknande resultat (${sp.sharpe?.toFixed(2)} vs ${om.sharpe?.toFixed(2)}).`;
+
+    return `<div class="bg-panel border border-amber-700/30 rounded-lg p-4 space-y-3">
+      <p class="text-xs font-semibold text-amber-400">Gate-isoleringsanalys (UNVALIDATED — survivorship bias)</p>
+      <div class="grid grid-cols-3 gap-3 text-xs">
+        <div class="bg-surface/60 rounded p-2">
+          <p class="text-muted mb-1 font-medium">Ingen gate</p>
+          <p>Sharpe: <span class="text-slate-300">${ng.sharpe?.toFixed(3) || "—"}</span></p>
+          <p>CAGR: <span class="text-slate-300">${p(ng.cagr)}</span></p>
+          <p>2022: <span style="color:#f43f5e">${p(ng22)}</span> (${ngCash22} kash-mån)</p>
+        </div>
+        <div class="bg-surface/60 rounded p-2">
+          <p class="text-muted mb-1 font-medium">SPY-gate (US)</p>
+          <p>Sharpe: <span class="text-slate-300">${sp.sharpe?.toFixed(3) || "—"}</span></p>
+          <p>CAGR: <span class="text-slate-300">${p(sp.cagr)}</span></p>
+          <p>2022: <span style="color:#f43f5e">${p(sp22)}</span> (${spCash22} kash-mån)</p>
+        </div>
+        <div class="bg-surface/60 rounded p-2">
+          <p class="text-muted mb-1 font-medium">XACT-OMXS30 gate</p>
+          <p>Sharpe: <span class="text-slate-300">${om.sharpe?.toFixed(3) || "—"}</span></p>
+          <p>CAGR: <span class="text-slate-300">${p(om.cagr)}</span></p>
+          <p>2022: <span style="color:#f43f5e">${p(om22)}</span> (${omCash22} kash-mån)</p>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400">
+        <span class="font-medium">Mekanik:</span> ${mechanicEdge} — jfr S&P 500 Top-7 Sharpe ~1.08.<br>
+        <span class="font-medium">Gate:</span> ${gateCompare}<br>
+        <span class="font-medium">Slutsats:</span> Momentum-rotationen replikerar <em>inte</em> på OMXS — edge är US-specifik.
+        Korrelation OMXS ↔ S&P Top-7: ~0.19. Diversifieringseffekt utan konkurrensfördel.
+      </p>
+    </div>`;
+  })() : `<div class="bg-panel border border-amber-700/30 rounded-lg p-4">
     <p class="text-xs font-semibold text-amber-400 mb-2">Korrelation med US-strategier (dagliga avkastningar)</p>
     <p class="text-xs text-muted">OMXS Top-5 ↔ D1-accel ETF: ~0.27 &nbsp;|&nbsp; OMXS Top-5 ↔ S&amp;P Top-7: ~0.19</p>
     <p class="text-xs text-slate-500 mt-1">Låg korrelation = diversifieringspotential, men svag replikering av US-mönstret på OMXS.</p>
   </div>`;
+  const corrNote = gateVerdict;
 
   el.innerHTML = `<div class="space-y-5">
     ${summaries.length ? `<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaries.join("")}</div>` : ""}
