@@ -1268,6 +1268,7 @@ function buildStocksToggles(available) {
 
 function renderStocksChart() {
   if (!stocksChart || !DATA) return;
+  stocksChart.resize();
   const strategies = DATA.strategies || {};
   const startDate  = "2019-10-01";
 
@@ -1648,6 +1649,7 @@ function _buildOMXSToggles(available) {
 
 function _renderOMXSChart() {
   if (!omxsChart || !DATA) return;
+  omxsChart.resize();
   const strategies = DATA.strategies || {};
   const startDate  = "2019-10-01";
 
