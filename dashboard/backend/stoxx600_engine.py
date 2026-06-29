@@ -10,12 +10,16 @@ log = logging.getLogger(__name__)
 STALE_HOURS = 48
 
 
-def run_stoxx600(data_root: Path) -> dict:
-    """Return dict of strategy entries for dashboard."""
+def run_stoxx600(data_root: Path) -> tuple[dict, dict]:
+    """
+    Return (strategies_dict, company_info_dict) for dashboard.
+    strategies_dict maps key → strategy entry.
+    company_info_dict maps ticker → {name, sector}.
+    """
     path = data_root / "results" / "stoxx600_results.json"
     if not path.exists():
         log.warning("STOXX600: stoxx600_results.json not found in %s", data_root)
-        return {}
+        return {}, {}
 
     age_h = (time.time() - path.stat().st_mtime) / 3600
     if age_h >= STALE_HOURS:
@@ -23,13 +27,14 @@ def run_stoxx600(data_root: Path) -> dict:
 
     try:
         data = json.loads(path.read_text())
-        strategies = data.get("strategies", {})
-        # Attach benchmark series to each strategy for downstream use
-        bench = data.get("benchmark", {})
+        strategies   = data.get("strategies", {})
+        company_info = data.get("company_info", {})
+        bench        = data.get("benchmark", {})
         for v in strategies.values():
             v.setdefault("benchmark", bench)
-        log.info("STOXX600: loaded %d strategies (%.1fh old)", len(strategies), age_h)
-        return strategies
+        log.info("STOXX600: loaded %d strategies, %d tickers (%.1fh old)",
+                 len(strategies), len(company_info), age_h)
+        return strategies, company_info
     except Exception as e:
         log.warning("STOXX600: failed to read %s: %s", path.name, e)
-        return {}
+        return {}, {}

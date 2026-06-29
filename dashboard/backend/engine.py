@@ -689,9 +689,11 @@ def run(cfg: dict = None, use_cache: bool = False):
     # ── STOXX 600 (Eurozone) validation ───────────────────────────────
     try:
         from stoxx600_engine import run_stoxx600
-        stoxx_results = run_stoxx600(_DATA_DIR)
+        stoxx_results, stoxx_company_info = run_stoxx600(_DATA_DIR)
         for k, v in stoxx_results.items():
             out["strategies"][k] = v
+        if stoxx_company_info:
+            out["stoxx_company_info"] = stoxx_company_info
         if stoxx_results:
             log.info("STOXX600: added %d strategies", len(stoxx_results))
     except Exception as e:

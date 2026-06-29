@@ -332,6 +332,7 @@ def run_backtest(prices: dict[str, pd.DataFrame], gate: pd.Series, top_n: int) -
     shares: dict[str, float] = {}   # current positions (shares)
     cash   = CAPITAL
     nav    = []
+    alloc_log: list[dict] = []
 
     pending_target: dict[str, float] | None = None  # weights → execute next bar
 
@@ -378,7 +379,9 @@ def run_backtest(prices: dict[str, pd.DataFrame], gate: pd.Series, top_n: int) -
                 in_regime = (g0 / glb - 1) > 0
 
         if not in_regime:
-            pending_target = {}  # go to cash
+            pending_target = {}
+            alloc_log.append({"date": date.strftime("%Y-%m-%d"),
+                              "holdings": {"CASH": 1.0}})
             continue
 
         # Score eligible tickers
@@ -392,14 +395,29 @@ def run_backtest(prices: dict[str, pd.DataFrame], gate: pd.Series, top_n: int) -
 
         if not raw:
             pending_target = {}
+            alloc_log.append({"date": date.strftime("%Y-%m-%d"),
+                              "holdings": {"CASH": 1.0}})
             continue
 
         ranked   = sorted(raw, key=raw.__getitem__, reverse=True)
         top_tkrs = ranked[:top_n]
         w        = 1.0 / len(top_tkrs)
         pending_target = {t: w for t in top_tkrs}
+        alloc_log.append({"date": date.strftime("%Y-%m-%d"),
+                          "holdings": dict(pending_target)})
 
-    return nav
+    return nav, alloc_log
+
+
+def _alloc_to_matrix(alloc_log: list[dict]) -> dict:
+    seen = []
+    for e in alloc_log:
+        for t in e["holdings"]:
+            if t not in seen:
+                seen.append(t)
+    dates   = [e["date"] for e in alloc_log]
+    weights = [[round(e["holdings"].get(t, 0.0), 4) for t in seen] for e in alloc_log]
+    return {"tickers": seen, "dates": dates, "weights": weights}
 
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
@@ -422,6 +440,40 @@ def calc_stats(nav: list[dict]) -> dict:
         "mdd":    round(mdd, 4),
         "years":  round(years, 1),
     }
+
+
+# ── Company info (name + sector) ──────────────────────────────────────────────
+COMPANY_CACHE = ROOT / "stoxx600_data" / "_company_info.json"
+
+def fetch_company_info(tickers: list[str]) -> dict[str, dict]:
+    """
+    Return {ticker: {name, sector}} for all tickers.
+    Loads from cache; fetches missing via yfinance.info.
+    """
+    cache: dict[str, dict] = {}
+    if COMPANY_CACHE.exists():
+        try:
+            cache = json.loads(COMPANY_CACHE.read_text())
+        except Exception:
+            cache = {}
+
+    missing = [t for t in tickers if t not in cache]
+    if missing:
+        print(f"Fetching company info for {len(missing)} tickers…")
+        for t in missing:
+            try:
+                info = yf.Ticker(t).info
+                cache[t] = {
+                    "name":   info.get("longName") or info.get("shortName") or t,
+                    "sector": info.get("sector", ""),
+                }
+            except Exception:
+                cache[t] = {"name": t, "sector": ""}
+            time.sleep(0.1)
+        COMPANY_CACHE.write_text(json.dumps(cache, ensure_ascii=False, separators=(",", ":")))
+        print(f"  Company info cached → {COMPANY_CACHE}")
+
+    return {t: cache.get(t, {"name": t, "sector": ""}) for t in tickers}
 
 
 # ── Benchmark: EXSA.DE total return ───────────────────────────────────────────
@@ -463,17 +515,34 @@ def main():
     benchmark = calc_benchmark(gate)
 
     results = {}
+    all_alloc_tickers: set[str] = set()
     for n in TOP_NS:
         print(f"Running Top-{n}…", end=" ", flush=True)
-        nav   = run_backtest(prices, gate, n)
+        nav, alloc_log = run_backtest(prices, gate, n)
         stats = calc_stats(nav)
         print(f"CAGR={stats.get('cagr', 0):.1%}  Sharpe={stats.get('sharpe', 0):.2f}  MDD={stats.get('mdd', 0):.1%}")
+        for e in alloc_log:
+            all_alloc_tickers.update(e["holdings"].keys())
         results[f"stoxx600_top{n}"] = {
-            "label": f"STOXX 600 Top-{n}",
+            "label": f"Euro STOXX Top-{n}",
             "nav":   nav,
             "stats": stats,
             "params": {"lb": LB, "win": WIN, "ema": EMA_SPAN, "top_n": n, "cost": COST},
+            "alloc_log":  alloc_log,
+            "allocation": _alloc_to_matrix(alloc_log),
+            "current_signal": {
+                "date": alloc_log[-1]["date"] if alloc_log else "",
+                "holdings": [
+                    {"ticker": t, "weight": w}
+                    for t, w in alloc_log[-1]["holdings"].items()
+                ] if alloc_log else [],
+            },
         }
+
+    # Company info for all tickers that ever appeared in allocations
+    info_tickers = sorted(t for t in all_alloc_tickers if t != "CASH")
+    print()
+    company_info = fetch_company_info(info_tickers)
 
     out = {
         "generated_at": pd.Timestamp.now().isoformat(),
@@ -481,6 +550,7 @@ def main():
         "loaded": len(prices),
         "failed": failed,
         "strategies": results,
+        "company_info": company_info,
         "benchmark": {
             "label": "STOXX Europe 600 ETF (EXSA.DE)",
             "series": benchmark,

@@ -2625,10 +2625,27 @@ function _renderSTOXXChart(available) {
   }, true);
 }
 
+// Sector color palette
+const SECTOR_COLORS = {
+  "Technology":           "#6366f1",
+  "Financial Services":   "#0ea5e9",
+  "Industrials":          "#f59e0b",
+  "Consumer Cyclical":    "#f97316",
+  "Consumer Defensive":   "#10b981",
+  "Healthcare":           "#ec4899",
+  "Energy":               "#eab308",
+  "Basic Materials":      "#84cc16",
+  "Communication Services":"#8b5cf6",
+  "Utilities":            "#38bdf8",
+  "Real Estate":          "#a78bfa",
+};
+function sectorColor(s) { return SECTOR_COLORS[s] || "#64748b"; }
+
 function _renderSTOXXStats(available) {
   const el = document.getElementById("stoxx-stats");
   if (!el) return;
-  const strategies = DATA?.strategies || {};
+  const strategies   = DATA?.strategies || {};
+  const companyInfo  = DATA?.stoxx_company_info || {};
 
   function pct(v, d = 1) {
     return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
@@ -2636,48 +2653,126 @@ function _renderSTOXXStats(available) {
   function colorVal(v) {
     return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e";
   }
+  function tickerLabel(t) {
+    const info = companyInfo[t];
+    return info ? `${info.name} <span class="text-muted font-normal">(${t})</span>` : t;
+  }
+  function sectorBadge(t) {
+    const sec = companyInfo[t]?.sector;
+    if (!sec) return "";
+    const c = sectorColor(sec);
+    return `<span class="text-xs px-1.5 py-0.5 rounded-full" style="background:${c}22;color:${c};border:1px solid ${c}44">${sec}</span>`;
+  }
 
   const activeStrats = available.filter(s => stoxxActiveKeys.has(s.key));
   if (!activeStrats.length) { el.innerHTML = ""; return; }
 
   const cards = activeStrats.map(({ key, label, color }) => {
-    const st = strategies[key]?.stats;
+    const strat  = strategies[key];
+    const st     = strat?.stats;
     if (!st) return "";
-    // stoxx600_results uses: cagr, vol, sharpe, mdd, years
-    const cagr   = st.cagr;
-    const sharpe = st.sharpe;
-    const mdd    = st.mdd;
-    const vol    = st.vol;
-    const years  = st.years;
-    const params = strategies[key]?.params || {};
-    return `<div class="bg-panel border border-border rounded-lg p-4">
-      <div class="flex items-center gap-2 mb-3">
+    const params    = strat.params || {};
+    const cs        = strat.current_signal || {};
+    const allocLog  = strat.alloc_log || [];
+
+    // ── Stats summary ──────────────────────────────────────────────
+    const summaryHtml = `
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mt-3">
+        <div><p class="text-xs text-muted mb-0.5">CAGR</p>
+          <p class="text-lg font-semibold" style="${colorVal(st.cagr)}">${pct(st.cagr)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
+          <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Max DD</p>
+          <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.mdd)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
+          <p class="text-lg font-semibold text-slate-300">${pct(st.vol)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Period</p>
+          <p class="text-lg font-semibold text-slate-300">${st.years?.toFixed(1) ?? "—"}y</p></div>
+      </div>
+      <div class="mt-2 text-xs text-muted">
+        lb=${params.lb ?? 63} win=${params.win ?? 10} ema=${params.ema ?? 8}
+        · top_n=${params.top_n ?? "?"} · cost=${((params.cost ?? 0.003)*100).toFixed(1)}bp
+        · gate=EXSA.DE 84d · ~169 EUR-aktier
+      </div>`;
+
+    // ── Current holdings ───────────────────────────────────────────
+    const currentRows = (cs.holdings || [])
+      .filter(h => h.ticker !== "CASH")
+      .map(h => {
+        const w = Math.round((h.weight || 0) * 100);
+        return `<div class="flex items-center justify-between py-2 border-b border-border last:border-0 gap-3">
+          <div class="min-w-0">
+            <span class="text-xs font-mono font-medium text-slate-300">${tickerLabel(h.ticker)}</span>
+            <div class="mt-0.5">${sectorBadge(h.ticker)}</div>
+          </div>
+          <span class="text-xs text-muted flex-shrink-0">${w}%</span>
+        </div>`;
+      }).join("") || '<p class="text-xs text-muted italic py-2">Inga innehav (kontanter)</p>';
+
+    const currentHtml = `
+      <div>
+        <p class="text-xs font-semibold text-slate-400 mb-2">Aktuell portfölj · ${cs.date || "—"}</p>
+        ${currentRows}
+      </div>`;
+
+    // ── Allocation history (last 24 months, most recent first) ─────
+    const histRows = [...allocLog].reverse().slice(0, 36).map(e => {
+      if (e.holdings["CASH"]) {
+        return `<tr class="border-b border-border">
+          <td class="py-1.5 pr-3 text-xs text-slate-400 whitespace-nowrap">${e.date}</td>
+          <td colspan="${params.top_n || 5}" class="py-1.5 text-xs text-muted italic">Kontanter (gate aktiv)</td>
+        </tr>`;
+      }
+      const cells = Object.keys(e.holdings).map(t => {
+        const info = companyInfo[t];
+        const sec  = info?.sector || "";
+        const c    = sectorColor(sec);
+        const shortName = info?.name
+          ? info.name.replace(/ (SE|SA|NV|AG|SpA|S\.p\.A\.|N\.V\.|plc|PLC|AB|AS|ASA|OYJ|Oyj|GmbH|KGaA|Holding|Group|Corp\.|Inc\.|Ltd\.?)/g, "").trim().slice(0, 22)
+          : t.replace(/\.[A-Z]+$/, "");
+        return `<td class="py-1.5 px-1">
+          <div class="text-xs text-slate-300 font-mono leading-tight">${t.replace(/\.[A-Z]+$/, "")}</div>
+          <div class="text-xs leading-tight" style="color:${c}">${shortName}</div>
+        </td>`;
+      });
+      return `<tr class="border-b border-border hover:bg-white/[0.02]">
+        <td class="py-1.5 pr-3 text-xs text-slate-400 whitespace-nowrap">${e.date}</td>
+        ${cells.join("")}
+      </tr>`;
+    }).join("");
+
+    const topN   = params.top_n || 5;
+    const colHdr = Array.from({length: topN}, (_, i) => `<th class="text-xs text-muted font-normal px-1 pb-2">#${i+1}</th>`).join("");
+    const histHtml = allocLog.length ? `
+      <div>
+        <p class="text-xs font-semibold text-slate-400 mb-2">Historik — månadsinnehav (senaste 36)</p>
+        <div class="overflow-auto max-h-[480px] rounded border border-border">
+          <table class="w-full min-w-max border-collapse">
+            <thead class="sticky top-0 bg-[#0f1117]">
+              <tr><th class="text-xs text-muted font-normal pr-3 pb-2 text-left">Datum</th>${colHdr}</tr>
+            </thead>
+            <tbody>${histRows}</tbody>
+          </table>
+        </div>
+      </div>` : "";
+
+    return `<div class="bg-panel border border-border rounded-lg p-4 space-y-5">
+      <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
         <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
       </div>
-      <div class="mb-2 px-1 py-1 bg-amber-900/20 border border-amber-700/30 rounded text-xs text-amber-400">
-        ⚠ UNVALIDATED — survivorship bias · EUR-zon (~169 aktier) · gate=EXSA.DE
+      <div class="px-2 py-1.5 bg-amber-900/20 border border-amber-700/30 rounded text-xs text-amber-400">
+        ⚠ UNVALIDATED — survivorship bias
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mt-3">
-        <div><p class="text-xs text-muted mb-0.5">CAGR</p>
-          <p class="text-lg font-semibold" style="${colorVal(cagr)}">${pct(cagr)}</p></div>
-        <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
-          <p class="text-lg font-semibold text-slate-300">${sharpe?.toFixed(2) ?? "—"}</p></div>
-        <div><p class="text-xs text-muted mb-0.5">Max DD</p>
-          <p class="text-lg font-semibold" style="color:#f43f5e">${pct(mdd)}</p></div>
-        <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
-          <p class="text-lg font-semibold text-slate-300">${pct(vol)}</p></div>
-        <div><p class="text-xs text-muted mb-0.5">Period</p>
-          <p class="text-lg font-semibold text-slate-300">${years?.toFixed(1) ?? "—"}y</p></div>
-      </div>
-      <div class="mt-3 text-xs text-muted">
-        Params: lb=${params.lb ?? 63} win=${params.win ?? 10} ema=${params.ema ?? 8}
-        · top_n=${params.top_n ?? "?"} · cost=${((params.cost ?? 0.003)*100).toFixed(1)}bp
+      ${summaryHtml}
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 pt-2">
+        ${currentHtml}
+        ${histHtml}
       </div>
     </div>`;
   }).join("");
 
-  el.innerHTML = `<div class="space-y-4">${cards}</div>`;
+  el.innerHTML = `<div class="space-y-6">${cards}</div>`;
 }
 
 // ── Documentation page ─────────────────────────────────────────────
