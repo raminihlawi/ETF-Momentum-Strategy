@@ -751,32 +751,55 @@ function renderSignalCards() {
 function renderPPMSignalCard(elId, strat) {
   const el = document.getElementById(elId);
   if (!el) return;
-  if (!strat?.current_signal) { el.innerHTML = ""; return; }
-  const { date, holdings } = strat.current_signal;
+  if (!strat?.rebal_signal && !strat?.current_signal) { el.innerHTML = ""; return; }
   const key   = "ppm_top3";
   const spec  = STRATEGY_SPECS[key];
   const color = spec?.color || "#06b6d4";
 
-  const rows = (holdings || []).map(h => {
-    const pct = Math.round(h.weight * 100);
-    const ppmLink = `<a href="https://www.pensionsmyndigheten.se/service/fondtorget/fond/${h.ticker}"
-        target="_blank" rel="noopener"
-        class="text-xs text-accent hover:underline font-mono">${h.ticker}</a>`;
-    return `
-      <div class="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-xs font-medium text-slate-300">${h.label}</span>
-            ${ppmLink}
-            <span class="text-xs px-1.5 rounded-sm bg-cyan-900/50 text-cyan-300">PPM</span>
+  const rebal = strat.rebal_signal || strat.current_signal;
+  const live  = strat.live_signal  || strat.current_signal;
+
+  function ppmRows(holdings) {
+    return (holdings || []).map(h => {
+      const pct = Math.round(h.weight * 100);
+      const ppmLink = `<a href="https://www.pensionsmyndigheten.se/service/fondtorget/fond/${h.ticker}"
+          target="_blank" rel="noopener"
+          class="text-xs text-accent hover:underline font-mono">${h.ticker}</a>`;
+      return `
+        <div class="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-medium text-slate-300">${h.label}</span>
+              ${ppmLink}
+              <span class="text-xs px-1.5 rounded-sm bg-cyan-900/50 text-cyan-300">PPM</span>
+            </div>
+            ${h.nordnet_name ? `<p class="text-xs text-muted mt-0.5 truncate">${h.nordnet_name}</p>` : ""}
           </div>
-          ${h.nordnet_name ? `<p class="text-xs text-muted mt-0.5 truncate">${h.nordnet_name}</p>` : ""}
-        </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <span class="text-xs text-muted">${pct}%</span>
-        </div>
-      </div>`;
-  }).join("");
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-xs text-muted">${pct}%</span>
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  const rebalTickers = (rebal?.holdings || []).map(h => h.ticker).sort().join(",");
+  const liveTickers  = (live?.holdings  || []).map(h => h.ticker).sort().join(",");
+  const sameHoldings = rebalTickers === liveTickers;
+
+  const rebalRows = ppmRows(rebal?.holdings) ||
+    '<p class="text-xs text-muted italic">Kontanter — abs-mom filter aktivt (AP7 Räntefond)</p>';
+
+  const liveSection = !sameHoldings ? `
+    <div class="mt-3 pt-2 border-t border-border">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs text-amber-400/80 font-medium">Live idag</span>
+        <span class="text-xs text-muted">${live?.date ?? ""}</span>
+      </div>
+      ${ppmRows(live?.holdings) || '<p class="text-xs text-muted italic">Kontanter</p>'}
+    </div>` : `
+    <p class="text-xs text-muted mt-2 pt-2 border-t border-border">
+      Live idag: samma innehav
+    </p>`;
 
   el.innerHTML = `
     <div class="flex items-center justify-between mb-3">
@@ -790,43 +813,69 @@ function renderPPMSignalCard(elId, strat) {
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
         </svg>
       </button>
-      <span class="text-xs text-muted">${date}</span>
+      <span class="text-xs text-muted">Rebalansering ${rebal?.date ?? ""}</span>
     </div>
-    ${rows || '<p class="text-xs text-muted italic">Kontanter — abs-mom filter aktivt (AP7 Räntefond)</p>'}`;
+    ${rebalRows}
+    ${liveSection}`;
 }
 
 function renderSignalCard(elId, strat, title, key) {
   const el = document.getElementById(elId);
-  if (!strat?.current_signal) { el.innerHTML = ""; return; }
-  const { date, holdings } = strat.current_signal;
+  if (!strat?.rebal_signal && !strat?.current_signal) { el.innerHTML = ""; return; }
   const spec  = STRATEGY_SPECS[key];
   const color = spec?.color || SERIES_CFG[key]?.color || "#64748b";
 
-  const rows = (holdings || []).map(h => {
-    const pct = Math.round(h.weight * 100);
-    return `
-      <div class="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-xs font-medium text-slate-300">${h.label}</span>
-            <span class="text-xs text-muted">${h.ticker}</span>
-            <span class="text-xs px-1.5 rounded-sm ${
-              h.sleeve === 'factor' ? 'bg-indigo-900/50 text-indigo-300' :
-              h.sleeve === 'sector' ? 'bg-purple-900/50 text-purple-300' :
-              'bg-slate-800 text-slate-400'}">${h.sleeve}</span>
+  const rebal = strat.rebal_signal || strat.current_signal;
+  const live  = strat.live_signal  || strat.current_signal;
+
+  function holdingRows(holdings) {
+    return (holdings || []).map(h => {
+      const pct = Math.round(h.weight * 100);
+      return `
+        <div class="flex items-start justify-between gap-3 py-2 border-b border-border last:border-0">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-medium text-slate-300">${h.label}</span>
+              <span class="text-xs text-muted">${h.ticker}</span>
+              <span class="text-xs px-1.5 rounded-sm ${
+                h.sleeve === 'factor' ? 'bg-indigo-900/50 text-indigo-300' :
+                h.sleeve === 'sector' ? 'bg-purple-900/50 text-purple-300' :
+                h.sleeve === 'ppm'    ? 'bg-teal-900/50 text-teal-300' :
+                'bg-slate-800 text-slate-400'}">${h.sleeve}</span>
+            </div>
+            ${h.nordnet_name ? `<p class="text-xs text-muted mt-0.5 truncate">${h.nordnet_name}</p>` : ""}
           </div>
-          ${h.nordnet_name ? `<p class="text-xs text-muted mt-0.5 truncate">${h.nordnet_name}</p>` : ""}
-        </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <span class="text-xs text-muted">${pct}%</span>
-          ${h.isin && h.isin !== "CASH" ? `
-            <button onclick="copyISIN('${h.isin}', this)"
-                    class="text-xs text-muted hover:text-accent border border-border hover:border-accent rounded px-2 py-0.5 transition-colors font-mono tracking-wide">
-              ${h.isin}
-            </button>` : ""}
-        </div>
-      </div>`;
-  }).join("");
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <span class="text-xs text-muted">${pct}%</span>
+            ${h.isin && h.isin !== "CASH" ? `
+              <button onclick="copyISIN('${h.isin}', this)"
+                      class="text-xs text-muted hover:text-accent border border-border hover:border-accent rounded px-2 py-0.5 transition-colors font-mono tracking-wide">
+                ${h.isin}
+              </button>` : ""}
+          </div>
+        </div>`;
+    }).join("");
+  }
+
+  // Check if live and rebal have the same picks
+  const rebalTickers = (rebal?.holdings || []).map(h => h.ticker).sort().join(",");
+  const liveTickers  = (live?.holdings  || []).map(h => h.ticker).sort().join(",");
+  const sameHoldings = rebalTickers === liveTickers;
+
+  const rebalRows = holdingRows(rebal?.holdings) ||
+    '<p class="text-xs text-muted italic">Kontanter — regimfilter aktivt</p>';
+
+  const liveSection = !sameHoldings ? `
+    <div class="mt-3 pt-2 border-t border-border">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs text-amber-400/80 font-medium">Live idag</span>
+        <span class="text-xs text-muted">${live?.date ?? ""}</span>
+      </div>
+      ${holdingRows(live?.holdings) || '<p class="text-xs text-muted italic">Kontanter</p>'}
+    </div>` : `
+    <p class="text-xs text-muted mt-2 pt-2 border-t border-border">
+      Live idag: samma innehav
+    </p>`;
 
   el.innerHTML = `
     <div class="flex items-center justify-between mb-3">
@@ -840,9 +889,10 @@ function renderSignalCard(elId, strat, title, key) {
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
         </svg>
       </button>
-      <span class="text-xs text-muted">${date}</span>
+      <span class="text-xs text-muted">Rebalansering ${rebal?.date ?? ""}</span>
     </div>
-    ${rows || '<p class="text-xs text-muted italic">Kontanter — regimfilter aktivt</p>'}`;
+    ${rebalRows}
+    ${liveSection}`;
 }
 
 // ── Strategy spec modal ────────────────────────────────────────────

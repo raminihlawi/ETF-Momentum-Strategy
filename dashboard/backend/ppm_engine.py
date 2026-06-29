@@ -330,12 +330,9 @@ def _alloc_matrix(alloc_log: list) -> dict:
 
 
 # ── Current signal ─────────────────────────────────────────────────
-def _current_signal(alloc_log: list) -> dict:
-    if not alloc_log:
-        return {}
-    last = alloc_log[-1]
+def _enrich_ppm_entry(entry: dict) -> dict:
     holdings = []
-    for ppm_id, w in last["holdings"].items():
+    for ppm_id, w in entry["holdings"].items():
         holdings.append({
             "ticker":       ppm_id,
             "weight":       w,
@@ -345,8 +342,59 @@ def _current_signal(alloc_log: list) -> dict:
             "isin":         "",
         })
     return {
-        "date":     last["date"],
+        "date":     entry["date"],
         "holdings": sorted(holdings, key=lambda x: x["label"]),
+    }
+
+
+def _true_bme(d: pd.Timestamp) -> pd.Timestamp:
+    """Last business day of d's calendar month."""
+    month_start = d.replace(day=1)
+    next_month  = month_start + pd.DateOffset(months=1)
+    return pd.bdate_range(month_start, next_month - pd.Timedelta(days=1))[-1]
+
+
+def _build_ppm_signals(alloc_log: list, wide: pd.DataFrame, scores: pd.DataFrame) -> dict:
+    """
+    Returns rebal_signal (last true calendar month-end) and live_signal (latest data).
+    """
+    if not alloc_log:
+        return {"rebal_signal": {}, "live_signal": {}}
+
+    # rebal_signal: last alloc_log entry on a true calendar BME
+    rebal_entry = None
+    for e in reversed(alloc_log):
+        d = pd.Timestamp(e["date"])
+        if d == _true_bme(d):
+            rebal_entry = e
+            break
+    if rebal_entry is None:
+        rebal_entry = alloc_log[-1]
+
+    # live_signal: score computed on the latest available date in wide
+    latest = scores.index[-1]
+    min_days = 252
+    elig = [
+        c for c in wide.columns
+        if c != BENCH_PPM
+        and wide[c].first_valid_index() is not None
+        and (latest - wide[c].first_valid_index()).days >= min_days
+    ]
+    if elig:
+        top = scores.loc[latest, elig].nlargest(TOP_N)
+        if top.iloc[0] < 0:
+            live_holdings = {CASH_PPM: round(1.0, 6)}
+        else:
+            w = round(1.0 / len(top), 6)
+            live_holdings = {t: w for t in top.index}
+    else:
+        live_holdings = alloc_log[-1]["holdings"]
+
+    live_entry = {"date": latest.strftime("%Y-%m-%d"), "holdings": live_holdings}
+
+    return {
+        "rebal_signal": _enrich_ppm_entry(rebal_entry),
+        "live_signal":  _enrich_ppm_entry(live_entry),
     }
 
 
@@ -420,7 +468,7 @@ def run_ppm(data_file: Path,
     daily  = _daily_nav_true(alloc_log, wide, wide.index)
     stats  = _compute_stats_monthly(nav_series, monthly_rets)
     alloc  = _alloc_matrix(alloc_log)
-    signal = _current_signal(alloc_log)
+    sigs   = _build_ppm_signals(alloc_log, wide, scores)
 
     log.info(
         f"PPM backtest done: {len(alloc_log)} months, "
@@ -432,6 +480,8 @@ def run_ppm(data_file: Path,
         "nav":            daily,
         "stats":          stats,
         "allocation":     alloc,
-        "current_signal": signal,
+        "rebal_signal":   sigs["rebal_signal"],
+        "live_signal":    sigs["live_signal"],
+        "current_signal": sigs["live_signal"],   # backwards compat
         "fund_names":     {UNIVERSE[k]: FUND_NAMES.get(k, k) for k in UNIVERSE},
     }

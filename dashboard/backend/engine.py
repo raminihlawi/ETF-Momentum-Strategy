@@ -369,11 +369,24 @@ def alloc_to_matrix(alloc_log: list) -> dict:
     return {"tickers": seen, "dates": dates, "weights": weights}
 
 
-def current_signal(alloc_log: list, cfg: dict) -> dict:
-    """Most recent allocation enriched with Nordnet proxy info."""
+def _true_bme(d: pd.Timestamp) -> pd.Timestamp:
+    """Last business day of d's calendar month."""
+    month_start = d.replace(day=1)
+    next_month  = month_start + pd.DateOffset(months=1)
+    return pd.bdate_range(month_start, next_month - pd.Timedelta(days=1))[-1]
+
+
+def build_signals(alloc_log: list, cfg: dict) -> dict:
+    """
+    Returns rebal_signal and live_signal for the signal card.
+
+    rebal_signal — last entry that falls on the true calendar BME of its month
+                   (what the strategy held after the last proper month-end rebalancing).
+    live_signal  — last entry in alloc_log regardless of date
+                   (what you would buy if rebalancing with latest available data).
+    """
     if not alloc_log:
-        return {}
-    last = alloc_log[-1]
+        return {"rebal_signal": {}, "live_signal": {}}
 
     # Build lookup: ticker → {label, sleeve, nordnet_name, isin}
     info = {}
@@ -384,22 +397,53 @@ def current_signal(alloc_log: list, cfg: dict) -> dict:
     cp = cfg["cash_proxy"]
     info[cp["ticker"]] = {**cp, "label": "CASH", "sleeve": "cash"}
 
-    holdings = []
-    for t, w in last["holdings"].items():
-        i = info.get(t, {"ticker": t, "label": t, "sleeve": "", "nordnet_name": "", "isin": ""})
-        holdings.append({
-            "ticker":       t,
-            "weight":       w,
-            "sleeve":       i.get("sleeve", ""),
-            "label":        i.get("label", t),
-            "nordnet_name": i.get("nordnet_name", ""),
-            "isin":         i.get("isin", ""),
-        })
+    def enrich(entry: dict) -> dict:
+        holdings = []
+        for t, w in entry["holdings"].items():
+            i = info.get(t, {"ticker": t, "label": t, "sleeve": "", "nordnet_name": "", "isin": ""})
+            holdings.append({
+                "ticker":       t,
+                "weight":       w,
+                "sleeve":       i.get("sleeve", ""),
+                "label":        i.get("label", t),
+                "nordnet_name": i.get("nordnet_name", ""),
+                "isin":         i.get("isin", ""),
+            })
+        return {
+            "date":     entry["date"],
+            "holdings": sorted(holdings, key=lambda x: (x["sleeve"], x["label"])),
+        }
+
+    live_entry = alloc_log[-1]
+
+    # Find last entry whose date == the calendar BME of its month
+    rebal_entry = None
+    for e in reversed(alloc_log):
+        d = pd.Timestamp(e["date"])
+        if d == _true_bme(d):
+            rebal_entry = e
+            break
+
+    # Fallback: last entry from a different (earlier) month than the live entry
+    if rebal_entry is None:
+        live_month = pd.Timestamp(live_entry["date"]).to_period("M")
+        for e in reversed(alloc_log):
+            if pd.Timestamp(e["date"]).to_period("M") < live_month:
+                rebal_entry = e
+                break
+
+    if rebal_entry is None:
+        rebal_entry = live_entry
 
     return {
-        "date":     last["date"],
-        "holdings": sorted(holdings, key=lambda x: (x["sleeve"], x["label"])),
+        "rebal_signal": enrich(rebal_entry),
+        "live_signal":  enrich(live_entry),
     }
+
+
+def current_signal(alloc_log: list, cfg: dict) -> dict:
+    """Kept for backwards compatibility — returns live_signal."""
+    return build_signals(alloc_log, cfg).get("live_signal", {})
 
 
 def compute_stats(equity_curve: list) -> dict:
@@ -564,12 +608,15 @@ def run(cfg: dict = None, use_cache: bool = False):
         }
 
     def strat_entry(label, eq, al):
+        sigs = build_signals(al, cfg)
         return {
             "label":          label,
             "nav":            eq,
             "stats":          compute_stats(eq),
             "allocation":     alloc_to_matrix(al),
-            "current_signal": current_signal(al, cfg),
+            "rebal_signal":   sigs["rebal_signal"],
+            "live_signal":    sigs["live_signal"],
+            "current_signal": sigs["live_signal"],   # backwards compat
         }
 
     out = {
