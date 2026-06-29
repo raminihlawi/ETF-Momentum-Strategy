@@ -311,6 +311,11 @@ const SERIES_CFG = {
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
   "S&P 500":    { label: "S&P 500",          color: "#f97316", width: 1.4 },
+  // STOXX 600
+  stoxx600_top5:  { label: "Euro STOXX Top-5",  color: "#ec4899", width: 2.5 },
+  stoxx600_top10: { label: "Euro STOXX Top-10", color: "#db2777", width: 2.0 },
+  stoxx600_top20: { label: "Euro STOXX Top-20", color: "#9d174d", width: 1.5 },
+  "EXSA.DE":    { label: "STOXX 600 ETF",      color: "#f9a8d4", width: 1.4 },
 };
 
 const ALLOC_PALETTE = [
@@ -340,20 +345,22 @@ let omxsChart   = null;
 let tickerColorMap = {};
 let ppmColorMap    = {};
 let stockColorMap  = {};
+let stoxxChart     = null;
 
 // ── Init ───────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
   mainChart   = echarts.init(document.getElementById("main-chart"),   null, { renderer: "canvas" });
   stocksChart = echarts.init(document.getElementById("stocks-chart"), null, { renderer: "canvas" });
   omxsChart   = echarts.init(document.getElementById("omxs-chart"),   null, { renderer: "canvas" });
-  window.addEventListener("resize", () => { mainChart?.resize(); stocksChart?.resize(); omxsChart?.resize(); });
+  stoxxChart  = echarts.init(document.getElementById("stoxx-chart"),  null, { renderer: "canvas" });
+  window.addEventListener("resize", () => { mainChart?.resize(); stocksChart?.resize(); omxsChart?.resize(); stoxxChart?.resize(); });
   document.getElementById("start-date").addEventListener("change", () => { if (DATA) renderMainChart(); });
   await loadData();
 });
 
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(tab) {
-  const views = ["dashboard", "settings", "funds", "screen", "stocks", "omxs", "logs", "docs"];
+  const views = ["dashboard", "settings", "funds", "screen", "stocks", "omxs", "stoxx", "logs", "docs"];
   views.forEach(v => document.getElementById("view-" + v)?.classList.toggle("hidden", tab !== v));
   views.forEach(v => {
     const el = document.getElementById("tab-" + v);
@@ -365,6 +372,7 @@ function switchTab(tab) {
   if (tab === "docs")     renderDocs();
   if (tab === "stocks")   renderStocksPage();
   if (tab === "omxs")     renderOMXSPage();
+  if (tab === "stoxx")    renderSTOXXPage();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -2497,6 +2505,179 @@ async function renderLogs() {
 Laddar…</pre>`;
 
   await fetchAndRender();
+}
+
+// ── STOXX 600 page ─────────────────────────────────────────────────
+const STOXX_STRATS = [
+  { key: "stoxx600_top5",  label: "Euro STOXX Top-5",  color: "#ec4899" },
+  { key: "stoxx600_top10", label: "Euro STOXX Top-10", color: "#db2777" },
+  { key: "stoxx600_top20", label: "Euro STOXX Top-20", color: "#9d174d" },
+];
+let stoxxActiveKeys = new Set(["stoxx600_top5", "stoxx600_top10", "stoxx600_top20"]);
+
+function renderSTOXXPage() {
+  if (!DATA) return;
+  const strategies = DATA.strategies || {};
+  const available  = STOXX_STRATS.filter(s => strategies[s.key]);
+
+  if (!available.length) {
+    document.getElementById("stoxx-stats").innerHTML =
+      `<div class="bg-amber-900/20 border border-amber-700/40 rounded-lg p-4 text-xs text-amber-300">
+        Ingen STOXX-data. Kör <code>python d1_accel_stoxx600.py</code> och starta om engine.
+       </div>`;
+    return;
+  }
+
+  _buildSTOXXToggles(available);
+  _renderSTOXXChart(available);
+  _renderSTOXXStats(available);
+}
+
+function _buildSTOXXToggles(available) {
+  const el = document.getElementById("stoxx-toggles");
+  if (!el) return;
+  el.innerHTML = "";
+  available.forEach(({ key, label, color }) => {
+    const on  = stoxxActiveKeys.has(key);
+    const btn = document.createElement("button");
+    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+    applyToggleStyle(btn, on, color);
+    const dot = document.createElement("span");
+    dot.className = "w-2 h-2 rounded-full flex-shrink-0";
+    dot.style.background = color;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(label));
+    btn.addEventListener("click", () => {
+      if (stoxxActiveKeys.has(key)) stoxxActiveKeys.delete(key);
+      else stoxxActiveKeys.add(key);
+      applyToggleStyle(btn, stoxxActiveKeys.has(key), color);
+      _renderSTOXXChart(available);
+      _renderSTOXXStats(available);
+    });
+    el.appendChild(btn);
+  });
+}
+
+function _renderSTOXXChart(available) {
+  if (!stoxxChart || !DATA) return;
+  stoxxChart.resize();
+  const strategies = DATA.strategies || {};
+  const startDate  = "2010-01-01";
+
+  function normalize(nav) {
+    if (!nav?.length) return [];
+    const idx = nav.findIndex(p => p.date >= startDate);
+    if (idx === -1) return [];
+    const base = nav[idx].value;
+    return base ? nav.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]) : [];
+  }
+
+  const series = STOXX_STRATS
+    .filter(s => stoxxActiveKeys.has(s.key) && strategies[s.key])
+    .map(({ key, label, color }) => ({
+      name: label, type: "line",
+      data: normalize(strategies[key].nav),
+      smooth: false, symbol: "none",
+      lineStyle: { color, width: SERIES_CFG[key]?.width || 2 },
+      itemStyle: { color },
+    }));
+
+  // Benchmark from the first loaded strategy
+  const firstKey = STOXX_STRATS.find(s => strategies[s.key])?.key;
+  const bench = strategies[firstKey]?.benchmark?.series;
+  if (bench) {
+    const c = "#f9a8d4";
+    series.push({
+      name: "STOXX 600 ETF (EXSA.DE)", type: "line",
+      data: normalize(bench), smooth: false, symbol: "none",
+      lineStyle: { color: c, width: 1.4, type: "dashed" },
+      itemStyle: { color: c },
+    });
+  }
+
+  stoxxChart.setOption({
+    backgroundColor: "transparent", animation: false,
+    grid:  { top: 24, left: 60, right: 20, bottom: 36 },
+    xAxis: { type: "time", min: startDate,
+             axisLabel: { color: "#8591b8", fontSize: 10 },
+             axisLine:  { lineStyle: { color: "#252a3d" } },
+             splitLine: { show: false } },
+    yAxis: { type: "value",
+             axisLabel: { color: "#8591b8", fontSize: 10, formatter: v => v.toFixed(0) },
+             axisLine:  { show: false },
+             splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } },
+             axisTick:  { show: false } },
+    tooltip: {
+      trigger: "axis", backgroundColor: "#1a1e2e",
+      borderColor: "#252a3d", textStyle: { color: "#c9d1e0", fontSize: 11 },
+      formatter(params) {
+        if (!params?.length) return "";
+        const d = new Date(params[0].axisValue).toISOString().slice(0, 10);
+        const rows = params.map(p =>
+          `<div style="display:flex;justify-content:space-between;gap:20px">
+            <span style="color:${p.color}">${p.seriesName}</span>
+            <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
+           </div>`).join("");
+        return `<div style="font-size:11px"><div style="color:#8591b8;margin-bottom:4px">${d}</div>${rows}</div>`;
+      },
+    },
+    legend: { show: false }, series,
+  }, true);
+}
+
+function _renderSTOXXStats(available) {
+  const el = document.getElementById("stoxx-stats");
+  if (!el) return;
+  const strategies = DATA?.strategies || {};
+
+  function pct(v, d = 1) {
+    return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
+  }
+  function colorVal(v) {
+    return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e";
+  }
+
+  const activeStrats = available.filter(s => stoxxActiveKeys.has(s.key));
+  if (!activeStrats.length) { el.innerHTML = ""; return; }
+
+  const cards = activeStrats.map(({ key, label, color }) => {
+    const st = strategies[key]?.stats;
+    if (!st) return "";
+    // stoxx600_results uses: cagr, vol, sharpe, mdd, years
+    const cagr   = st.cagr;
+    const sharpe = st.sharpe;
+    const mdd    = st.mdd;
+    const vol    = st.vol;
+    const years  = st.years;
+    const params = strategies[key]?.params || {};
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+        <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+      </div>
+      <div class="mb-2 px-1 py-1 bg-amber-900/20 border border-amber-700/30 rounded text-xs text-amber-400">
+        ⚠ UNVALIDATED — survivorship bias · EUR-zon (~169 aktier) · gate=EXSA.DE
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mt-3">
+        <div><p class="text-xs text-muted mb-0.5">CAGR</p>
+          <p class="text-lg font-semibold" style="${colorVal(cagr)}">${pct(cagr)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
+          <p class="text-lg font-semibold text-slate-300">${sharpe?.toFixed(2) ?? "—"}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Max DD</p>
+          <p class="text-lg font-semibold" style="color:#f43f5e">${pct(mdd)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
+          <p class="text-lg font-semibold text-slate-300">${pct(vol)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Period</p>
+          <p class="text-lg font-semibold text-slate-300">${years?.toFixed(1) ?? "—"}y</p></div>
+      </div>
+      <div class="mt-3 text-xs text-muted">
+        Params: lb=${params.lb ?? 63} win=${params.win ?? 10} ema=${params.ema ?? 8}
+        · top_n=${params.top_n ?? "?"} · cost=${((params.cost ?? 0.003)*100).toFixed(1)}bp
+      </div>
+    </div>`;
+  }).join("");
+
+  el.innerHTML = `<div class="space-y-4">${cards}</div>`;
 }
 
 // ── Documentation page ─────────────────────────────────────────────

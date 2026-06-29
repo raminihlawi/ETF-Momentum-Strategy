@@ -53,6 +53,7 @@
     <button id="tab-logs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('logs')">Loggar</button>
     <button id="tab-stocks"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('stocks')">Aktier</button>
     <button id="tab-omxs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('omxs')">OMXS</button>
+    <button id="tab-stoxx"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('stoxx')">STOXX</button>
     <button id="tab-docs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('docs')">Dokumentation</button>
   </nav>
 </header>
@@ -221,6 +222,33 @@
 <!-- ═══════════════════════════════════════════════════════════════
      LOGS VIEW
 ═══════════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════
+     STOXX VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-stoxx" class="hidden px-6 py-5 space-y-5">
+
+  <!-- Header + toggles -->
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300">Euro STOXX — D1-ACCEL rotation <span class="text-amber-400 font-normal text-xs ml-2">UNVALIDATED</span></h2>
+      <p class="text-xs text-muted mt-0.5">
+        Eurozonens aktier (FR/DE/NL/ES/IT/BE/AT/FI) · alla EUR ·
+        lb=63 win=10 ema=8 · gate=EXSA.DE · 30 bps · survivorship bias
+      </p>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="stoxx-toggles"></div>
+  </div>
+
+  <!-- Equity chart -->
+  <div class="bg-panel border border-border rounded-lg">
+    <div id="stoxx-chart" class="w-full" style="height:420px;"></div>
+  </div>
+
+  <!-- Stats -->
+  <div id="stoxx-stats"></div>
+
+</div>
+
 <div id="view-logs" class="hidden px-6 py-5 max-w-6xl"></div>
 
 <!-- ═══════════════════════════════════════════════════════════════

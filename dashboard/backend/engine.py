@@ -686,6 +686,17 @@ def run(cfg: dict = None, use_cache: bool = False):
     except Exception as e:
         log.warning("OMXS engine failed: %s", e)
 
+    # ── STOXX 600 (Eurozone) validation ───────────────────────────────
+    try:
+        from stoxx600_engine import run_stoxx600
+        stoxx_results = run_stoxx600(_DATA_DIR)
+        for k, v in stoxx_results.items():
+            out["strategies"][k] = v
+        if stoxx_results:
+            log.info("STOXX600: added %d strategies", len(stoxx_results))
+    except Exception as e:
+        log.warning("STOXX600 engine failed: %s", e)
+
     # ── Screening ─────────────────────────────────────────────────────
     if screening_cfg and screening_tickers:
         try:
