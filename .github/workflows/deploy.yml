@@ -32,6 +32,12 @@ jobs:
             "$VENV/bin/pip" install -q --upgrade \
               -r "$DEPLOY_DIR/dashboard/backend/requirements.txt"
 
+            echo "── Syncing results to data dir ───────────────"
+            mkdir -p "$DATA_DIR/results"
+            for f in "$DEPLOY_DIR"/results/*.json; do
+              [ -f "$f" ] && cp "$f" "$DATA_DIR/results/"
+            done
+
             echo "── Restarting service ────────────────────────"
             sudo systemctl restart etf-dashboard
 
