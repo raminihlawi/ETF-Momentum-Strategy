@@ -2,8 +2,13 @@
 APScheduler — daily data refresh jobs.
 
 Schedule (Europe/Stockholm):
-  09:30  Weekdays — fetch new PPM NAV → recalculate
-  22:30  Weekdays — fetch new ETF prices → recalculate
+  09:30  Weekdays — fetch PPM NAV (previous day) → recalculate
+  18:00  Weekdays — fetch PPM NAV (today's close) → recalculate
+  22:30  Weekdays — fetch ETF prices → recalculate
+
+Two PPM jobs: 09:30 gives an early-morning signal; 18:00 catches
+today's closing NAV from kurser.txt (updated after ~17:30 market close)
+so the month-end rebalancing signal is based on that day's prices.
 
 The scheduler is started once at FastAPI startup (see main.py lifespan).
 All jobs run in a thread pool; the engine subprocess is guarded by an
@@ -67,7 +72,15 @@ def start(config_path: Path, db_path: Path, run_engine_fn) -> None:
         _job_ppm,
         CronTrigger(day_of_week="mon-fri", hour=9, minute=30, timezone=tz),
         args=[config_path, db_path, run_engine_fn],
-        id="ppm_daily",
+        id="ppm_morning",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _job_ppm,
+        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=tz),
+        args=[config_path, db_path, run_engine_fn],
+        id="ppm_close",
         replace_existing=True,
         misfire_grace_time=3600,
     )
@@ -82,7 +95,7 @@ def start(config_path: Path, db_path: Path, run_engine_fn) -> None:
 
     _scheduler.start()
     log.info(
-        "Scheduler started — PPM @ 09:30 CET, ETF @ 22:30 CET (weekdays)"
+        "Scheduler started — PPM @ 09:30 + 18:00 CET, ETF @ 22:30 CET (weekdays)"
     )
 
 
