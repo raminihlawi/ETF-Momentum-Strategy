@@ -699,6 +699,19 @@ def run(cfg: dict = None, use_cache: bool = False):
     except Exception as e:
         log.warning("STOXX600 engine failed: %s", e)
 
+    # ── OMXS Sammansatt Momentum ───────────────────────────────────────
+    try:
+        from omxs_sammansatt_engine import run_omxs_sammansatt
+        omxs_sm_results, omxs_sm_info = run_omxs_sammansatt(_DATA_DIR)
+        for k, v in omxs_sm_results.items():
+            out["strategies"][k] = v
+        if omxs_sm_info:
+            out["omxs_company_info"] = omxs_sm_info
+        if omxs_sm_results:
+            log.info("OMXS sammansatt: added %d strategies", len(omxs_sm_results))
+    except Exception as e:
+        log.warning("OMXS sammansatt engine failed: %s", e)
+
     # ── Screening ─────────────────────────────────────────────────────
     if screening_cfg and screening_tickers:
         try:

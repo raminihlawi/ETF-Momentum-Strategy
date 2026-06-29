@@ -305,8 +305,11 @@ const SERIES_CFG = {
   spy_gate_top5:      { label: "OMXS SPY gate — Top 5",  color: "#059669", width: 2.0 },
   omxs_gate_top3:     { label: "OMXS local gate — Top 3",color: "#3b82f6", width: 2.5 },
   omxs_gate_top5:     { label: "OMXS local gate — Top 5",color: "#2563eb", width: 2.0 },
-  omxs_top3:          { label: "OMXS — Top 3",      color: "#818cf8", width: 2.5 },
-  omxs_top5:          { label: "OMXS — Top 5",      color: "#a78bfa", width: 2.0 },
+  omxs_top3:                { label: "OMXS — Top 3",              color: "#818cf8", width: 2.5 },
+  omxs_top5:                { label: "OMXS — Top 5",              color: "#a78bfa", width: 2.0 },
+  omxs_sammansatt_top5:     { label: "Sammansatt Mom Top-5",       color: "#f97316", width: 2.5 },
+  omxs_sammansatt_top7:     { label: "Sammansatt Mom Top-7",       color: "#fb923c", width: 2.0 },
+  omxs_sammansatt_top10:    { label: "Sammansatt Mom Top-10",      color: "#fdba74", width: 1.5 },
   "MSCI World": { label: "MSCI World",       color: "#64748b", width: 1.4 },
   "OMXS30":     { label: "OMXS30",           color: "#38bdf8", width: 1.4 },
   "Nasdaq":     { label: "Nasdaq",            color: "#f59e0b", width: 1.4 },
@@ -1577,6 +1580,11 @@ function renderStocksStats(available) {
 
 // ── OMXS page ──────────────────────────────────────────────────────
 // Gate-comparison variants (preferred when omxs_gates_results.json is loaded)
+const OMXS_SAMMANSATT_STRATS = [
+  { key: "omxs_sammansatt_top5",  label: "Sammansatt Top-5",  color: "#f97316", group: "sammansatt" },
+  { key: "omxs_sammansatt_top7",  label: "Sammansatt Top-7",  color: "#fb923c", group: "sammansatt" },
+  { key: "omxs_sammansatt_top10", label: "Sammansatt Top-10", color: "#fdba74", group: "sammansatt" },
+];
 const OMXS_GATE_STRATS = [
   { key: "no_gate_top3",   label: "No gate — Top 3",         color: "#8b5cf6", group: "no_gate"   },
   { key: "no_gate_top5",   label: "No gate — Top 5",         color: "#7c3aed", group: "no_gate"   },
@@ -1590,10 +1598,12 @@ const OMXS_LEGACY_STRATS = [
   { key: "omxs_top5", label: "OMXS — Top 5", color: "#a78bfa", group: "legacy" },
 ];
 function _getOMXSStrats(strategies) {
-  return OMXS_GATE_STRATS.some(s => strategies[s.key]) ? OMXS_GATE_STRATS : OMXS_LEGACY_STRATS;
+  if (OMXS_SAMMANSATT_STRATS.some(s => strategies[s.key])) return OMXS_SAMMANSATT_STRATS;
+  if (OMXS_GATE_STRATS.some(s => strategies[s.key])) return OMXS_GATE_STRATS;
+  return OMXS_LEGACY_STRATS;
 }
 
-let omxsActiveKeys = new Set(["no_gate_top3", "spy_gate_top3", "omxs_gate_top3", "omxs_top3", "d1_accel"]);
+let omxsActiveKeys = new Set(["omxs_sammansatt_top5", "omxs_sammansatt_top7", "no_gate_top3", "spy_gate_top3", "omxs_gate_top3", "omxs_top3", "d1_accel"]);
 let omxsColorMap   = {};
 
 function renderOMXSPage() {
@@ -1659,7 +1669,8 @@ function _renderOMXSChart() {
   if (!omxsChart || !DATA) return;
   omxsChart.resize();
   const strategies = DATA.strategies || {};
-  const startDate  = "2019-10-01";
+  const hasSammansatt = OMXS_SAMMANSATT_STRATS.some(s => strategies[s.key] && omxsActiveKeys.has(s.key));
+  const startDate  = hasSammansatt ? "2006-01-01" : "2019-10-01";
 
   function normalize(nav) {
     if (!nav?.length) return [];
@@ -1669,7 +1680,7 @@ function _renderOMXSChart() {
     return base ? nav.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]) : [];
   }
 
-  const allOMXSKeys = [...OMXS_GATE_STRATS.map(s => s.key), ...OMXS_LEGACY_STRATS.map(s => s.key), "d1_accel"];
+  const allOMXSKeys = [...OMXS_SAMMANSATT_STRATS.map(s => s.key), ...OMXS_GATE_STRATS.map(s => s.key), ...OMXS_LEGACY_STRATS.map(s => s.key), "d1_accel"];
   const series = allOMXSKeys
     .filter(k => omxsActiveKeys.has(k) && strategies[k])
     .map(k => {
@@ -1680,12 +1691,14 @@ function _renderOMXSChart() {
                itemStyle: { color: c.color } };
     });
 
-  // OMXS30 benchmark
+  // OMXS30 benchmark — use inline benchmark from sammansatt results when available
+  const sammansattBench = strategies["omxs_sammansatt_top5"]?.benchmark?.series;
   const bm = DATA.benchmarks?.["OMXS30"];
-  if (bm?.series) {
+  const bmSeries = sammansattBench || bm?.series;
+  if (bmSeries) {
     const c = SERIES_CFG["OMXS30"] || { color: "#38bdf8" };
     series.push({ name: "OMXS30", type: "line",
-                  data: normalize(bm.series), smooth: false, symbol: "none",
+                  data: normalize(bmSeries), smooth: false, symbol: "none",
                   lineStyle: { color: c.color, width: 1.5, type: "dashed" },
                   itemStyle: { color: c.color } });
   }
@@ -1723,7 +1736,10 @@ function _renderOMXSChart() {
 function _renderOMXSHoldings(available) {
   const el = document.getElementById("omxs-signal-row");
   if (!el) return;
-  const strategies = DATA?.strategies || {};
+  const strategies  = DATA?.strategies || {};
+  const companyInfo = DATA?.omxs_company_info || {};
+  const isSammansatt = available.some(s => s.key.startsWith("omxs_sammansatt"));
+
   el.innerHTML = available.map(({ key, label, color }) => {
     const cs = strategies[key]?.current_signal;
     if (!cs) return "";
@@ -1731,39 +1747,38 @@ function _renderOMXSHoldings(available) {
     if (cashHolding) {
       return `<div class="bg-panel border border-border rounded-lg p-4">
         <div class="flex items-center justify-between mb-3">
-          <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group">
-            <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
-            <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
-          </button>
+          <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
           <span class="text-xs text-muted">${cs.date}</span>
         </div>
-        <p class="text-xs text-muted italic">Kontanter — regimfilter aktivt (OMXS30 &lt; 0)</p>
+        <p class="text-xs text-muted italic">Kontanter — absolut momentum negativt</p>
       </div>`;
     }
     const chips = (cs.holdings || [])
       .filter(h => h.ticker !== "CASH")
       .map(h => {
-        const c   = omxsColorMap[h.ticker] || color;
+        const name = companyInfo[h.ticker]?.name || h.ticker;
+        const displayName = isSammansatt ? name : h.ticker.replace(".ST","");
         const pct = Math.round(h.weight * 100);
         return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-          <span class="text-xs font-mono font-medium text-slate-300">${h.ticker.replace(".ST","")}</span>
-          <span class="text-xs text-muted">${pct}%</span>
+          <div class="min-w-0">
+            <span class="text-xs font-mono font-medium text-slate-300">${h.ticker.replace(".ST","")}</span>
+            ${isSammansatt && name !== h.ticker ? `<span class="text-xs text-muted ml-2 truncate">${name}</span>` : ""}
+          </div>
+          <span class="text-xs text-muted ml-2 shrink-0">${pct}%</span>
         </div>`;
       }).join("");
     return `<div class="bg-panel border border-border rounded-lg p-4">
       <div class="flex items-center justify-between mb-3">
-        <button onclick="openSpecModal('${key}')" class="flex items-center gap-2 group">
+        <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
           <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
-          <svg class="w-3 h-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
-          </svg>
-        </button>
+        </div>
         <span class="text-xs text-muted">${cs.date}</span>
       </div>
-      <div class="mb-2 px-1 py-1 bg-amber-900/20 border border-amber-700/30 rounded text-xs text-amber-400">
-        ⚠ UNVALIDATED — survivorship bias present
-      </div>
+      ${!isSammansatt ? `<div class="mb-2 px-2 py-1 bg-amber-900/20 border border-amber-700/30 rounded text-xs text-amber-400">
+        ⚠ UNVALIDATED — survivorship bias
+      </div>` : ""}
       ${chips || '<p class="text-xs text-muted italic">Inga innehav</p>'}
     </div>`;
   }).join("");
@@ -1860,6 +1875,9 @@ function _renderOMXSStats(available) {
     return `<table class="w-full border-collapse">${header}<tbody>${rows}</tbody></table>`;
   }
 
+  const isSammansatt = available.some(s => s.key.startsWith("omxs_sammansatt"));
+  const companyInfo  = DATA?.omxs_company_info || {};
+
   const summaries = activeStrats.map(summaryCard).filter(Boolean);
   const heatmaps  = available.filter(s => omxsActiveKeys.has(s.key)).map(heatmap).filter(Boolean);
   let annualPairs = "";
@@ -1869,69 +1887,106 @@ function _renderOMXSStats(available) {
     </div>`;
   }
 
-  // Gate-comparison verdict panel (shown when gate-comparison data is loaded)
-  const hasGateData = strategies["no_gate_top3"] || strategies["spy_gate_top3"] || strategies["omxs_gate_top3"];
-  const gateVerdict = hasGateData ? (() => {
+  // ── Sammansatt holdings history ─────────────────────────────────────
+  function _sammansattHistory() {
+    const top5key = "omxs_sammansatt_top5";
+    const log = strategies[top5key]?.alloc_log;
+    if (!log?.length) return "";
+
+    // Build sorted list of all tickers that appear (not CASH)
+    const tickerSet = new Set();
+    log.forEach(e => Object.keys(e.holdings).forEach(t => { if (t !== "CASH") tickerSet.add(t); }));
+    const allTickers = [...tickerSet].sort();
+
+    // Unique colors per ticker
+    const PALETTE = ["#f97316","#fb923c","#fdba74","#a78bfa","#818cf8","#38bdf8",
+                     "#34d399","#6ee7b7","#f59e0b","#fcd34d","#f43f5e","#fb7185",
+                     "#c4b5fd","#7dd3fc","#86efac","#fde68a","#fda4af","#cbd5e1"];
+    const tColor = {};
+    allTickers.forEach((t, i) => { tColor[t] = PALETTE[i % PALETTE.length]; });
+
+    const rows = [...log].reverse().map(e => {
+      const held = Object.entries(e.holdings).filter(([t]) => t !== "CASH");
+      const isCash = held.length === 0;
+      const dateStr = e.date.slice(0,7);
+      if (isCash) {
+        return `<tr class="border-t border-border/40 hover:bg-white/[0.02]">
+          <td class="py-1.5 pr-3 text-xs text-slate-500 font-mono whitespace-nowrap">${dateStr}</td>
+          <td colspan="2" class="text-xs text-slate-600 italic py-1.5">kontanter</td>
+        </tr>`;
+      }
+      const chips = held.map(([t, w]) => {
+        const name = companyInfo[t]?.name || t;
+        const tk   = t.replace(".ST","");
+        const col  = tColor[t] || "#8591b8";
+        return `<span class="inline-flex items-center gap-1 mr-1.5 mb-0.5">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:${col}"></span>
+          <span class="text-xs font-mono font-medium" style="color:${col}">${tk}</span>
+          <span class="text-xs text-slate-500">${(w*100).toFixed(0)}%</span>
+        </span>`;
+      }).join("");
+      const names = held.map(([t]) => (companyInfo[t]?.name || t).split(" ").slice(0,2).join(" ")).join(", ");
+      return `<tr class="border-t border-border/40 hover:bg-white/[0.02]">
+        <td class="py-1.5 pr-3 text-xs text-slate-500 font-mono whitespace-nowrap align-top pt-2">${dateStr}</td>
+        <td class="py-1 pr-2 align-top">${chips}</td>
+        <td class="py-1.5 text-xs text-slate-600 align-top hidden xl:table-cell whitespace-nowrap">${names}</td>
+      </tr>`;
+    }).join("");
+
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">
+          Innehavshistorik — Sammansatt Top-5 (2006–idag)
+        </p>
+        <span class="text-xs text-slate-600">${log.length} månader</span>
+      </div>
+      <div class="overflow-y-auto max-h-[520px] pr-1">
+        <table class="w-full border-collapse">
+          <thead class="sticky top-0 bg-panel z-10">
+            <tr>
+              <th class="text-left pb-2 pr-3 text-xs text-muted font-normal w-16">Datum</th>
+              <th class="text-left pb-2 pr-2 text-xs text-muted font-normal">Innehav</th>
+              <th class="text-left pb-2 text-xs text-muted font-normal hidden xl:table-cell">Bolag</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── Gate-comparison note (legacy) ──────────────────────────────────
+  const hasGateData = !isSammansatt && (strategies["no_gate_top3"] || strategies["spy_gate_top3"] || strategies["omxs_gate_top3"]);
+  const corrNote = hasGateData ? (() => {
     const ng = strategies["no_gate_top5"]?.stats  || {};
     const sp = strategies["spy_gate_top5"]?.stats  || {};
     const om = strategies["omxs_gate_top5"]?.stats || {};
     const p  = v => v != null ? `${v >= 0 ? "+" : ""}${(v*100).toFixed(1)}%` : "—";
-    const ngCash22 = (strategies["no_gate_top5"]?.meta?.cash_months||[]).filter(m=>m.startsWith("2022")).length;
-    const spCash22 = (strategies["spy_gate_top5"]?.meta?.cash_months||[]).filter(m=>m.startsWith("2022")).length;
-    const omCash22 = (strategies["omxs_gate_top5"]?.meta?.cash_months||[]).filter(m=>m.startsWith("2022")).length;
-    const ng22 = strategies["no_gate_top5"]?.stats?.annual?.["2022"]?.ret;
-    const sp22 = strategies["spy_gate_top5"]?.stats?.annual?.["2022"]?.ret;
-    const om22 = strategies["omxs_gate_top5"]?.stats?.annual?.["2022"]?.ret;
-
-    const mechanicEdge = (ng.sharpe || 0) >= 0.4
-      ? `<span class="text-green-400">Viss edge</span> utan gate (Sharpe ${ng.sharpe?.toFixed(2)})`
-      : `<span class="text-amber-400">Svag/ingen edge</span> utan gate (Sharpe ${ng.sharpe?.toFixed(2) || "—"})`;
-
-    const gateCompare = (sp.sharpe || 0) > (om.sharpe || 0) + 0.05
-      ? `SPY-gate ger bättre Sharpe än lokal gate (${sp.sharpe?.toFixed(2)} vs ${om.sharpe?.toFixed(2)}).`
-      : (om.sharpe || 0) > (sp.sharpe || 0) + 0.05
-        ? `Lokal XACT-gate ger bättre Sharpe (${om.sharpe?.toFixed(2)} vs SPY ${sp.sharpe?.toFixed(2)}).`
-        : `SPY-gate och lokal gate ger liknande resultat (${sp.sharpe?.toFixed(2)} vs ${om.sharpe?.toFixed(2)}).`;
-
-    return `<div class="bg-panel border border-amber-700/30 rounded-lg p-4 space-y-3">
-      <p class="text-xs font-semibold text-amber-400">Gate-isoleringsanalys (UNVALIDATED — survivorship bias)</p>
+    return `<div class="bg-panel border border-amber-700/30 rounded-lg p-4">
+      <p class="text-xs font-semibold text-amber-400 mb-2">Gate-isoleringsanalys (UNVALIDATED — survivorship bias)</p>
       <div class="grid grid-cols-3 gap-3 text-xs">
         <div class="bg-surface/60 rounded p-2">
           <p class="text-muted mb-1 font-medium">Ingen gate</p>
-          <p>Sharpe: <span class="text-slate-300">${ng.sharpe?.toFixed(3) || "—"}</span></p>
+          <p>Sharpe: <span class="text-slate-300">${ng.sharpe?.toFixed(2) || "—"}</span></p>
           <p>CAGR: <span class="text-slate-300">${p(ng.cagr)}</span></p>
-          <p>2022: <span style="color:#f43f5e">${p(ng22)}</span> (${ngCash22} kash-mån)</p>
         </div>
         <div class="bg-surface/60 rounded p-2">
-          <p class="text-muted mb-1 font-medium">SPY-gate (US)</p>
-          <p>Sharpe: <span class="text-slate-300">${sp.sharpe?.toFixed(3) || "—"}</span></p>
+          <p class="text-muted mb-1 font-medium">SPY-gate</p>
+          <p>Sharpe: <span class="text-slate-300">${sp.sharpe?.toFixed(2) || "—"}</span></p>
           <p>CAGR: <span class="text-slate-300">${p(sp.cagr)}</span></p>
-          <p>2022: <span style="color:#f43f5e">${p(sp22)}</span> (${spCash22} kash-mån)</p>
         </div>
         <div class="bg-surface/60 rounded p-2">
           <p class="text-muted mb-1 font-medium">XACT-OMXS30 gate</p>
-          <p>Sharpe: <span class="text-slate-300">${om.sharpe?.toFixed(3) || "—"}</span></p>
+          <p>Sharpe: <span class="text-slate-300">${om.sharpe?.toFixed(2) || "—"}</span></p>
           <p>CAGR: <span class="text-slate-300">${p(om.cagr)}</span></p>
-          <p>2022: <span style="color:#f43f5e">${p(om22)}</span> (${omCash22} kash-mån)</p>
         </div>
       </div>
-      <p class="text-xs text-slate-400">
-        <span class="font-medium">Mekanik:</span> ${mechanicEdge} — jfr S&P 500 Top-7 Sharpe ~1.08.<br>
-        <span class="font-medium">Gate:</span> ${gateCompare}<br>
-        <span class="font-medium">Slutsats:</span> Momentum-rotationen replikerar <em>inte</em> på OMXS — edge är US-specifik.
-        Korrelation OMXS ↔ S&P Top-7: ~0.19. Diversifieringseffekt utan konkurrensfördel.
-      </p>
     </div>`;
-  })() : `<div class="bg-panel border border-amber-700/30 rounded-lg p-4">
-    <p class="text-xs font-semibold text-amber-400 mb-2">Korrelation med US-strategier (dagliga avkastningar)</p>
-    <p class="text-xs text-muted">OMXS Top-5 ↔ D1-accel ETF: ~0.27 &nbsp;|&nbsp; OMXS Top-5 ↔ S&amp;P Top-7: ~0.19</p>
-    <p class="text-xs text-slate-500 mt-1">Låg korrelation = diversifieringspotential, men svag replikering av US-mönstret på OMXS.</p>
-  </div>`;
-  const corrNote = gateVerdict;
+  })() : "";
 
   el.innerHTML = `<div class="space-y-5">
     ${summaries.length ? `<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">${summaries.join("")}</div>` : ""}
-    ${corrNote}
+    ${isSammansatt ? _sammansattHistory() : corrNote}
     ${annualPairs ? `<div class="bg-panel border border-border rounded-lg p-4">
       <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Per år</p>
       ${annualPairs}
