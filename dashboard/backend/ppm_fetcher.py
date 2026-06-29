@@ -1,24 +1,20 @@
 """
 PPM NAV fetcher — Pensionsmyndigheten fondtorg.
 
-NOTE: The Pensionsmyndigheten REST API at /service/fondtorget/fonder/{id}/andelsvarden
-requires authentication (redirects to "åtkomst nekad" for unauthenticated requests).
-fetch_incremental() will log a warning and return 0 until authentication is resolved.
+Fetches daily NAV snapshot from:
+  https://static.pensionsmyndigheten.se/fond/kurser.txt
 
-Practical workflow until API auth is configured:
+The file is a fixed-width Latin-1 text with all PPM funds for the latest trading day.
+One HTTP GET per day fetches all funds — no per-fund API calls needed.
+
+For historical backfill (first-time setup or gap-fill):
   1. Download quarterly CSV from https://www.pensionsmyndigheten.se/service/fondtorget
      (click "Ladda ner fondandelskurser" → select funds & date range → export CSV)
-  2. POST to /api/import-ppm (multipart/form-data, field "file") or call import_csv() directly.
-
-API auth options to investigate:
-  - Pensionsmyndigheten Öppna Data portal (may require API key registration)
-  - CSRF token + session cookie from the website
-  - OAuth2 via Swedish BankID / API gateway
-
-import_csv() and import_excel() are always available as the reliable fallback.
+  2. POST to /api/import-ppm or call import_csv() directly.
 """
 import logging
-from datetime import date, timedelta
+import re
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -44,63 +40,39 @@ PPM_UNIVERSE = {
     "545541": "AP7 Räntefond",
 }
 
-BASE_URL = "https://www.pensionsmyndigheten.se/service/fondtorget/fonder"
-HEADERS  = {
-    "Accept":     "application/json",
-    "User-Agent": "etf-dashboard/1.0",
-}
+KURSER_URL = "https://static.pensionsmyndigheten.se/fond/kurser.txt"
+HEADERS    = {"User-Agent": "etf-dashboard/1.0"}
 
 
-def _parse_response(data: dict | list) -> list[tuple[str, float]]:
+def fetch_kurser_txt(client: httpx.Client) -> dict[str, tuple[str, float]]:
     """
-    Parse API response → list of (date_str, nav_sek).
-    Handles the most common response shapes from Pensionsmyndigheten.
+    Fetch today's NAV snapshot from Pensionsmyndigheten.
+    Returns {ppm_number: (date_str, nav_sek)} for every fund in the file.
+    Uses Köpkurs (buy price) as NAV.
     """
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict):
-        # Try common key names
-        items = (
-            data.get("andelsvarden")
-            or data.get("values")
-            or data.get("data")
-            or []
-        )
-    else:
-        return []
+    resp = client.get(KURSER_URL, headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    text = resp.content.decode("latin-1")
 
-    result = []
-    for item in items:
-        # Key names vary — try both Swedish and English
-        d = item.get("datum") or item.get("date") or item.get("Datum")
-        v = item.get("andelsvarde") or item.get("navSek") or item.get("nav") or item.get("value")
-        if d and v is not None:
-            try:
-                result.append((str(d)[:10], float(v)))
-            except (ValueError, TypeError):
-                pass
+    result: dict[str, tuple[str, float]] = {}
+    for line in text.splitlines():
+        if not line or not line[0].isdigit():
+            continue
+        fondnr = line[:6].strip()
+        if not fondnr:
+            continue
+        # Extract two prices and date from end of line (robust vs fixed-width)
+        m = re.search(r'([0-9,]+)\s+([0-9,]+)\s+(\d{4}-\d{2}-\d{2})\s*$', line)
+        if not m:
+            continue
+        try:
+            kopkurs = float(m.group(1).replace(',', '.'))
+            datum   = m.group(3)
+            result[fondnr] = (datum, kopkurs)
+        except ValueError:
+            continue
+
     return result
-
-
-def fetch_fund(
-    ppm_number: str,
-    from_date: str,
-    to_date: str,
-    client: httpx.Client,
-) -> list[tuple[str, str, float]]:
-    """Fetch NAV rows for one fund → list of (ppm_number, date, nav_sek)."""
-    url = f"{BASE_URL}/{ppm_number}/andelsvarden"
-    params = {"from": from_date, "tom": to_date}
-    try:
-        resp = client.get(url, params=params, headers=HEADERS, timeout=30)
-        resp.raise_for_status()
-        rows = _parse_response(resp.json())
-        return [(ppm_number, d, v) for d, v in rows]
-    except httpx.HTTPStatusError as exc:
-        log.error("PPM %s: HTTP %s — %s", ppm_number, exc.response.status_code, url)
-    except Exception as exc:
-        log.error("PPM %s: %s", ppm_number, exc)
-    return []
 
 
 def fetch_incremental(
@@ -108,77 +80,72 @@ def fetch_incremental(
     db_path: Path | None = None,
 ) -> int:
     """
-    Fetch only missing days for each PPM fund and upsert into ppm_nav.
-    Returns total new rows inserted.
+    Fetch today's NAV snapshot and upsert new rows into ppm_nav.
+    Skips if DB already has today's data.
+    Returns number of new rows inserted.
     """
     init_db(db_path)
-    numbers = ppm_numbers or list(PPM_UNIVERSE.keys())
+    numbers = set(ppm_numbers or list(PPM_UNIVERSE.keys()))
     today   = date.today().isoformat()
 
     last = last_ppm_date(db_path)
-    from_date = (
-        (date.fromisoformat(last) + timedelta(days=1)).isoformat()
-        if last
-        else "2010-01-01"
-    )
-
-    if from_date > today:
+    if last and last >= today:
         log.info("PPM NAV already up to date (%s)", last)
         return 0
 
-    log.info("Fetching PPM NAV from %s to %s (%d funds)…", from_date, today, len(numbers))
+    log.info("Fetching PPM NAV from kurser.txt…")
+    try:
+        with httpx.Client() as client:
+            all_navs = fetch_kurser_txt(client)
+    except Exception as exc:
+        log.error("PPM fetch failed: %s", exc)
+        return 0
 
-    total = 0
-    with httpx.Client() as client:
-        for ppm_number in numbers:
-            rows = fetch_fund(ppm_number, from_date, today, client)
-            if rows:
-                upsert_ppm_nav(rows, db_path)
-                total += len(rows)
-                log.info(
-                    "PPM %s (%s): +%d rows",
-                    ppm_number,
-                    PPM_UNIVERSE.get(ppm_number, "?"),
-                    len(rows),
-                )
-            else:
-                log.debug("PPM %s: no new rows", ppm_number)
+    log.info("kurser.txt: %d funds in file", len(all_navs))
 
-    log.info("PPM fetch complete — %d new rows total", total)
-    return total
+    rows: list[tuple[str, str, float]] = []
+    for ppm_number in numbers:
+        if ppm_number in all_navs:
+            datum, nav = all_navs[ppm_number]
+            rows.append((ppm_number, datum, nav))
+            log.info("PPM %s (%s): %s = %.4f SEK",
+                     ppm_number, PPM_UNIVERSE.get(ppm_number, "?"), datum, nav)
+        else:
+            log.warning("PPM %s not found in kurser.txt", ppm_number)
+
+    if rows:
+        upsert_ppm_nav(rows, db_path)
+
+    log.info("PPM fetch complete — %d new rows", len(rows))
+    return len(rows)
 
 
 def probe_api() -> bool:
     """
-    Quick connectivity check — fetches 3 days for AP7 Aktiefond.
-    Run this manually to verify the API endpoint is still valid:
+    Quick connectivity check — fetches kurser.txt and verifies AP7 Aktiefond is present.
+    Run manually:
       python3 -c "from ppm_fetcher import probe_api; probe_api()"
     """
-    url = f"{BASE_URL}/581371/andelsvarden"
-    params = {"from": "2024-01-01", "tom": "2024-01-05"}
     try:
         with httpx.Client() as client:
-            resp = client.get(url, params=params, headers=HEADERS, timeout=15)
-        if resp.status_code != 200:
-            log.error("Probe failed — HTTP %s\nURL: %s", resp.status_code, resp.url)
-            log.error("Response: %s", resp.text[:500])
-            return False
-        rows = _parse_response(resp.json())
-        if not rows:
-            log.error("Probe: connected but could not parse response:\n%s", resp.text[:500])
-            return False
-        log.info("Probe OK — got %d rows, first: %s", len(rows), rows[0])
-        return True
+            navs = fetch_kurser_txt(client)
+        if "581371" in navs:
+            datum, nav = navs["581371"]
+            log.info("Probe OK — AP7 Aktiefond (581371): %s = %.4f SEK", datum, nav)
+            return True
+        log.error("Probe: kurser.txt fetched (%d funds) but AP7 Aktiefond (581371) not found",
+                  len(navs))
+        return False
     except Exception as exc:
         log.error("Probe exception: %s", exc)
         return False
 
 
-# ── CSV / Excel import (reliable fallback) ─────────────────────────
+# ── CSV / Excel import (historical backfill) ───────────────────────
 def import_csv(file_path: Path, db_path: Path | None = None) -> int:
     """
-    Import ppm_all_nav.csv (or any CSV with columns ppm_number,name,date,nav_sek)
-    into the ppm_nav table. Returns number of new rows upserted.
+    Import ppm_all_nav.csv (columns: ppm_number, name, date, nav_sek)
+    into ppm_nav. Returns number of rows upserted.
     """
     import pandas as pd
     df = pd.read_csv(file_path, dtype={"ppm_number": str})
@@ -197,27 +164,23 @@ def import_excel(file_path: Path, db_path: Path | None = None) -> int:
     """
     Import Pensionsmyndigheten quarterly Excel export
     (columns: Fondnummer / Fondnamn / Datum / Andelsvärde or similar).
-    Returns number of new rows upserted.
+    Returns number of rows upserted.
     """
     import pandas as pd
 
     df = pd.read_excel(file_path, dtype=str)
     df.columns = [c.strip() for c in df.columns]
 
-    # Map Swedish column names to our schema
     col_map = {
-        # ppm_number
-        "Fondnummer":   "ppm_number",
-        "PPM-nummer":   "ppm_number",
-        "Fund number":  "ppm_number",
-        # date
-        "Datum":        "date",
-        "Date":         "date",
-        # nav_sek
-        "Andelsvärde":  "nav_sek",
-        "Andelsvarde":  "nav_sek",
-        "NAV":          "nav_sek",
-        "nav_sek":      "nav_sek",
+        "Fondnummer":  "ppm_number",
+        "PPM-nummer":  "ppm_number",
+        "Fund number": "ppm_number",
+        "Datum":       "date",
+        "Date":        "date",
+        "Andelsvärde": "nav_sek",
+        "Andelsvarde": "nav_sek",
+        "NAV":         "nav_sek",
+        "nav_sek":     "nav_sek",
     }
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
