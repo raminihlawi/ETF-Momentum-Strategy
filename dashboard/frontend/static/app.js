@@ -2914,6 +2914,10 @@ function renderDocs() {
     <a href="#sec-screening"   class="hover:text-slate-300 transition-colors">7. Screening</a>
     <span>·</span>
     <a href="#sec-findings"    class="hover:text-slate-300 transition-colors">8. Nyckelresultat</a>
+    <span>·</span>
+    <a href="#sec-sammansatt"  class="hover:text-slate-300 transition-colors">9. Sammansatt Momentum — Aktier</a>
+    <span>·</span>
+    <a href="#sec-autoupdate"  class="hover:text-slate-300 transition-colors">10. Automatisk datauppdatering</a>
   </div>
 </div>
 
@@ -3264,6 +3268,291 @@ would_select = score(kandidat, t) &gt; portfolio_threshold
   <div class="callout callout-green mt-3">
     <strong class="text-slate-300">Sammanfattning:</strong> Den optimala PPM-konfigurationen (EMA10/ROC84/accel30/top3/ETF-cash sync) levererar Sharpe 1.92 och CAGR 23.7 % med MaxDD −7.8 % — väsentligt bättre än AP7 Aktiefond (Sharpe 1.23, CAGR 15.8 %, MaxDD −16.7 %) på alla tre nyckeltal. ETF-cash sync är den viktigaste enskilda innovationen: genom att dela regimfilter med D1-accel synkas de defensiva perioderna och risken minskar utan att avkastningen offras.
   </div>
+</div>
+
+<!-- ─ 9. SAMMANSATT MOMENTUM — AKTIER ────────────────────────────── -->
+<div class="doc-card space-y-4" id="sec-sammansatt">
+  <p class="doc-h2">9 · Sammansatt Momentum — Aktiestrategier</p>
+
+  <p class="doc-p">BörsLabbet Sammansatt Momentum är en svensk aktiestrategimodell baserad på kombinerad rankingpoäng av tre momentum-horisonter. Strategin implementeras här på fyra universum: OMXS, STOXX 600, S&P 500 och ett globalt kombinerat universum.</p>
+
+  <p class="doc-h3">9.1 Scoreformel</p>
+  <div class="formula">
+score(t) = mean( ret_3m, ret_6m, ret_12m )
+
+där:
+  ret_Xm = P(t − 21) / P(t − 21 − LB) − 1
+  LB = 63d (3m), 126d (6m), 252d (12m)
+  21 handelsdagars "skip" (1 månads eftersläpning)
+  → undviker mean-reversion på kort sikt (Jegadeesh 1990)
+
+Absolut momentumfilter: om score(t) ≤ 0 → CASH den månaden
+  </div>
+
+  <p class="doc-p">Skip-perioden (21 dagar) är avgörande: utan den fångar strategin kortsiktig mean-reversion — aktier som rasat häftigt nyligen rankas falskt högt. Skipet börjar mäta 1 månad tillbaka och undviker denna effekt.</p>
+
+  <p class="doc-h3">9.2 Backtest-parametrar (gemensamma)</p>
+  <div class="kv-row"><span class="kv-key">Skip (1M lag)</span><span class="kv-val">21 handelsdagar</span></div>
+  <div class="kv-row"><span class="kv-key">Lookback 3M</span><span class="kv-val">63 handelsdagar</span></div>
+  <div class="kv-row"><span class="kv-key">Lookback 6M</span><span class="kv-val">126 handelsdagar</span></div>
+  <div class="kv-row"><span class="kv-key">Lookback 12M</span><span class="kv-val">252 handelsdagar</span></div>
+  <div class="kv-row"><span class="kv-key">Min-data per aktie</span><span class="kv-val">294 handelsdagar (21+252+21 warm-up)</span></div>
+  <div class="kv-row"><span class="kv-key">Rebalansering</span><span class="kv-val">Sista handelsdagen varje månad</span></div>
+  <div class="kv-row"><span class="kv-key">Handelskostnad</span><span class="kv-val">30 bps (0.30 %) per transaktion (köp+sälj)</span></div>
+  <div class="kv-row"><span class="kv-key">Viktning</span><span class="kv-val">Likviktat bland valda aktier</span></div>
+  <div class="kv-row"><span class="kv-key">Startkapital</span><span class="kv-val">100 000 kr</span></div>
+  <div class="kv-row"><span class="kv-key">Backtest-period</span><span class="kv-val">2006–2026 (beroende på datatillgång)</span></div>
+
+  <p class="doc-h3">9.3 OMXS — Svenska large-cap-aktier</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-1">
+    <div>
+      <p class="doc-h3" style="color:#f97316">Universum &amp; filter</p>
+      <ul class="doc-ul">
+        <li>141 svenska aktier med marknadsvärde &gt; 2 miljarder SEK</li>
+        <li>Priser i SEK, konverterade till USD via SEKUSD=X för jämförelse</li>
+        <li>Inkluderar Stockholmsbörsen och Helsingforsbörsen (HEX)</li>
+        <li><strong class="text-orange-400">Survivorship bias:</strong> universumet är statiskt (nuvarande large-caps) — bolag som gick i konkurs eller avnoterades finns ej</li>
+      </ul>
+    </div>
+    <div>
+      <p class="doc-h3" style="color:#f97316">Resultat</p>
+      <table class="doc-tbl mt-1">
+        <thead><tr><th>Top-N</th><th>CAGR</th><th>Sharpe</th><th>MaxDD</th></tr></thead>
+        <tbody>
+          <tr><td>Top-5</td><td>+33.7%</td><td>1.26</td><td>-40%</td></tr>
+          <tr><td>Top-7</td><td>+30.2%</td><td>1.19</td><td>-38%</td></tr>
+          <tr><td>Top-10</td><td>+26.8%</td><td>1.14</td><td>-37%</td></tr>
+        </tbody>
+      </table>
+      <p class="text-xs text-muted mt-1">Benchmark: OMXS30 (^OMX)</p>
+    </div>
+  </div>
+
+  <p class="doc-h3">9.4 Euro STOXX 600 — Europeiska aktier</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-1">
+    <div>
+      <p class="doc-h3" style="color:#c026d3">Universum &amp; filter</p>
+      <ul class="doc-ul">
+        <li>296 europeiska aktier ur STOXX 600-indexet</li>
+        <li>Priser i EUR (lokal notering), konverterade till USD via EURUSD=X</li>
+        <li>Inkluderar Xetra (DE), Euronext (FR/NL/BE), Milano (IT), Madrid (ES), m.fl.</li>
+        <li><strong class="text-purple-400">Survivorship bias:</strong> statiskt universum — exkluderar avnoterade och sämre bolag</li>
+      </ul>
+    </div>
+    <div>
+      <p class="doc-h3" style="color:#c026d3">Resultat</p>
+      <table class="doc-tbl mt-1">
+        <thead><tr><th>Top-N</th><th>CAGR</th><th>Sharpe</th><th>MaxDD</th></tr></thead>
+        <tbody>
+          <tr><td>Top-5</td><td>+28.2%</td><td>1.09</td><td>-41%</td></tr>
+          <tr><td>Top-7</td><td>+25.1%</td><td>1.06</td><td>-40%</td></tr>
+          <tr><td>Top-10</td><td>+21.4%</td><td>1.01</td><td>-39%</td></tr>
+        </tbody>
+      </table>
+      <p class="text-xs text-muted mt-1">Benchmark: EXSA.DE (STOXX 600 ETF, USD)</p>
+    </div>
+  </div>
+
+  <p class="doc-h3">9.5 S&amp;P 500 — Amerikanska aktier (PIT)</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-1">
+    <div>
+      <p class="doc-h3" style="color:#34d399">Universum &amp; filter</p>
+      <ul class="doc-ul">
+        <li>500 aktier med <strong class="text-emerald-400">point-in-time (PIT) membership</strong></li>
+        <li>Priser i USD (ingen FX-konvertering)</li>
+        <li>PIT-listan innehåller start- och slutdatum för varje akties S&P 500-medlemsskap — vid varje rebalansering används bara aktier som faktiskt var i index den månaden</li>
+        <li><strong class="text-emerald-400">Ingen survivorship bias</strong> — den korrektaste av de tre universen</li>
+        <li>Datat sträcker sig bakåt till ~2015 för flertalet aktier (begränsad historik)</li>
+      </ul>
+    </div>
+    <div>
+      <p class="doc-h3" style="color:#34d399">Resultat</p>
+      <table class="doc-tbl mt-1">
+        <thead><tr><th>Top-N</th><th>CAGR</th><th>Sharpe</th><th>MaxDD</th></tr></thead>
+        <tbody>
+          <tr><td>Top-5</td><td>+24.7%</td><td>0.82</td><td>-43%</td></tr>
+          <tr><td>Top-7</td><td>+22.3%</td><td>0.79</td><td>-42%</td></tr>
+          <tr><td>Top-10</td><td>+19.8%</td><td>0.77</td><td>-41%</td></tr>
+        </tbody>
+      </table>
+      <p class="text-xs text-muted mt-1">Benchmark: SPY. Lägre Sharpe förklaras delvis av kortare historik och avsaknad av survivorship bias.</p>
+    </div>
+  </div>
+
+  <p class="doc-h3">9.6 Global — SP500 + STOXX + OMXS kombinerat</p>
+  <p class="doc-p">Det globala universumet kombinerar alla tre regioner i en gemensam rangordning. Valutaomräkning sker till USD för rättvis jämförelse. För att undvika dominans av ett enskilt land eller sektor gäller ett tak på max 3 aktier per universum i Top-7 (anpassas med N).</p>
+
+  <div class="formula">
+Globalt pool: OMXS (141) + STOXX (296) + SP500 (500) = 937 aktier
+
+FX-konvertering:
+  OMXS-aktier × SEKUSD(t)  → USD-pris
+  STOXX-aktier × EURUSD(t) → USD-pris
+  SP500-aktier              → redan i USD
+
+Urval Top-7 med cap: max 3 per universum
+  → minst 1 aktie från varje region om de har positivt momentum
+  → undviker 100% koncentration i ett enskilt momentum-klimat
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-2">
+    <div>
+      <p class="doc-h3">Resultat — Global</p>
+      <table class="doc-tbl mt-1">
+        <thead><tr><th>Strategi</th><th>CAGR</th><th>Sharpe</th><th>MaxDD</th></tr></thead>
+        <tbody>
+          <tr><td>Top-7 (max 3/univ)</td><td>+39.7%</td><td>1.33</td><td>-35%</td></tr>
+          <tr><td>Top-10 (max 4/univ)</td><td>+37.0%</td><td>1.35</td><td>-36%</td></tr>
+          <tr><td>Top-15 (max 5/univ)</td><td>+29.7%</td><td>1.21</td><td>-39%</td></tr>
+          <tr><td><em>Ingen cap (original)</em></td><td><em>+38.6%</em></td><td><em>1.26</em></td><td><em>-39%</em></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <p class="doc-h3">Varför cap förbättrar Sharpe</p>
+      <ul class="doc-ul">
+        <li>Utan cap dominerar en enda region/sektor när den toppar — ex. sju halvledar-aktier (2025)</li>
+        <li>Cap 3/univ tvingar regional diversifiering → jämnare avkastning → högre Sharpe trots liknande CAGR</li>
+        <li>MDD förbättras från -39% till -35% — cap är ett implicit diversifieringsskydd</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-amber mt-3">
+    <strong class="text-slate-300">Viktigt om bias:</strong> OMXS och STOXX har survivorship bias (statiska universum utan avnoterade bolag). SP500 är PIT-korrekt. De höga globala CAGR-talen är troligen 5–8 procentenheter överdrivna jämfört med verkliga utfall. Trots detta är Sharpe 1.33 och regional spridning genuint värdefullt — strategin identifierar korrekt vilken region/sektor som har starkast momentum och roterar dit.
+  </div>
+
+  <p class="doc-h3">9.7 Jämförelse av universum</p>
+  <table class="doc-tbl mt-1">
+    <thead><tr><th>Universum</th><th>Antal aktier</th><th>Valuta</th><th>Bias</th><th>Historik</th><th>Top-5/7 CAGR</th><th>Top-5/7 Sharpe</th></tr></thead>
+    <tbody>
+      <tr><td>OMXS (Top-5)</td><td>141</td><td>SEK→USD</td><td>Survivorship</td><td>2006–2026</td><td>+33.7%</td><td>1.26</td></tr>
+      <tr><td>STOXX (Top-5)</td><td>296</td><td>EUR→USD</td><td>Survivorship</td><td>2006–2026</td><td>+28.2%</td><td>1.09</td></tr>
+      <tr><td>SP500 (Top-5)</td><td>500 (PIT)</td><td>USD</td><td>Ingen</td><td>~2015–2026</td><td>+24.7%</td><td>0.82</td></tr>
+      <tr><td>Global (Top-7)</td><td>937</td><td>USD</td><td>Delvis</td><td>2006–2026</td><td>+39.7%</td><td>1.33</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-cyan mt-3">
+    <strong class="text-slate-300">Slutsats om aktiestrategier vs ETF-strategier:</strong> Sammansatt Momentum på enskilda aktier ger väsentligt högre CAGR (24–40%) jämfört med ETF-rotationsstrategierna (13–18%). Priset är högre volatilitet, djupare drawdowns och mer koncentrerade portföljer (5–10 aktier). ETF-strategierna är bättre lämpade för stabila kassaflöden och lägre psykologisk belastning — aktiestrategierna för den som accepterar 30–40% volatilitet i utbyte mot höga genomsnittliga avkastningar.
+  </div>
+</div>
+
+<!-- ─ 10. AUTOMATISK DATAUPPDATERING ─────────────────────────────── -->
+<div class="doc-card space-y-4" id="sec-autoupdate">
+  <p class="doc-h2">10 · Automatisk datauppdatering</p>
+
+  <p class="doc-p">Dashboarden hämtar och beräknar all data autonomt på servern (VPS). Ingen manuell åtgärd krävs för löpande drift — systemet håller sig uppdaterat med marknadsdata och omberäknar strategisignalerna enligt schema nedan.</p>
+
+  <p class="doc-h3">10.1 Uppdateringsschema</p>
+  <table class="doc-tbl mt-1">
+    <thead>
+      <tr>
+        <th>Tid (CET)</th><th>Frekvens</th><th>Vad händer</th><th>Data som uppdateras</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="font-mono">09:30</td><td>Vardagar</td>
+        <td>Hämtar PPM NAV (föregående dag, sent uppdaterat)</td>
+        <td>PPM-kurser → PPM-strategi-signal → <code>data.json</code></td>
+      </tr>
+      <tr>
+        <td class="font-mono">18:00</td><td>Vardagar</td>
+        <td>Hämtar PPM NAV (dagens stängning, tillgänglig efter ~17:30)</td>
+        <td>PPM-kurser → PPM-strategi-signal → <code>data.json</code></td>
+      </tr>
+      <tr>
+        <td class="font-mono">22:30</td><td>Vardagar</td>
+        <td>Hämtar ETF-priser från Yahoo Finance</td>
+        <td>ETF-priser → D1/D2/PPM-strategier → screening → <code>data.json</code></td>
+      </tr>
+      <tr>
+        <td class="font-mono">06:00</td><td>2:a varje månad</td>
+        <td>Hämtar aktiekurser (OMXS/STOXX/SP500) + kör backtests</td>
+        <td>Aktiepriser → Sammansatt Momentum → OMXS/STOXX/SP500/Global-signaler</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="doc-h3">10.2 Vad som uppdateras per datakälla</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-1">
+    <div>
+      <p class="doc-h3">ETF-priser (daglig)</p>
+      <ul class="doc-ul">
+        <li>Alla ETF:er i faktor- och sektor-sleeve</li>
+        <li>Benchmark: IWDA.L, IBTS.L, ^OMX, ^GSPC, ^IXIC</li>
+        <li>Screening-kandidater (konfigurerbar lista)</li>
+        <li>Inkrementell: hämtar bara bars sedan senast</li>
+        <li>Sparas i SQLite-databasen (<code>dashboard.db</code>)</li>
+      </ul>
+    </div>
+    <div>
+      <p class="doc-h3">PPM-kurser (daglig)</p>
+      <ul class="doc-ul">
+        <li>Hämtas från Pensionsmyndighetens öppna API</li>
+        <li>14 fonder i PPM-universumet</li>
+        <li>Inkrementell: bara nya datum sedan senaste hämtning</li>
+        <li>Vid månadsslut: PPM-strategisignalen beräknas om med ny data</li>
+        <li>Manuell import via Loggar-fliken (CSV/Excel)</li>
+      </ul>
+    </div>
+    <div>
+      <p class="doc-h3">Aktiekurser (månadsvis)</p>
+      <ul class="doc-ul">
+        <li>141 OMXS large-cap-aktier (SEK)</li>
+        <li>296 STOXX 600-aktier (EUR, lokal valuta)</li>
+        <li>~1 200 SP500-aktier, alla historiska medlemmar</li>
+        <li>Valutakurser: SEKUSD=X, EURUSD=X</li>
+        <li>Gate-ETF:er: SPY, EXSA.DE, ^OMX</li>
+        <li>Inkrementell: laddar hem bara perioden sedan senaste fil</li>
+        <li>Sparas som komprimerade CSV-filer (<code>.csv.gz</code>)</li>
+      </ul>
+    </div>
+    <div>
+      <p class="doc-h3">Backtest-beräkning (månadsvis)</p>
+      <ul class="doc-ul">
+        <li>Kör om hela Sammansatt Momentum-backtesten för alla fyra universum</li>
+        <li>Beräkningstid: ~15–30 min (937 aktier × 20 år × daglig data)</li>
+        <li>Uppdaterar innehåll och grafer på OMXS/STOXX/SP500/Global-sidorna</li>
+        <li>Startar automatiskt vid deploy om resultaten är äldre än 35 dagar</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="doc-h3">10.3 Manuell uppdatering</p>
+  <table class="doc-tbl mt-1">
+    <thead><tr><th>Åtgärd</th><th>API-anrop</th><th>Effekt</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Hämta ETF+PPM och räkna om</td>
+        <td><code>POST /api/refresh-data</code></td>
+        <td>Full ETF+PPM fetch + engine-kör (~2 min)</td>
+      </tr>
+      <tr>
+        <td>Räkna om utan ny data</td>
+        <td><code>POST /api/recalculate</code></td>
+        <td>Kör engine på befintlig data (~30 sek)</td>
+      </tr>
+      <tr>
+        <td>Hämta aktiedata + backtest</td>
+        <td><code>POST /api/recalculate-stocks</code></td>
+        <td>Full aktie-fetch + alla 4 backtests (~30–60 min)</td>
+      </tr>
+      <tr>
+        <td>Importera PPM-data manuellt</td>
+        <td><code>POST /api/import-ppm</code></td>
+        <td>Ladda upp CSV/Excel från Pensionsmyndigheten</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-green mt-3">
+    <strong class="text-slate-300">Praktisk implikation för månadsallokeringar:</strong> Aktiestrategiernas signal (OMXS/STOXX/SP500/Global) uppdateras den 2:a i varje månad med föregående månads stängningspriser. Månadsallokeringen för ETF/PPM uppdateras kl 22:30 sista handelsdagen i månaden. Man kan alltså se den aktuella signalen för alla strategier redan på morgonen den 2:a.
+  </div>
+
+  <p class="doc-h3">10.4 Datastatus &amp; loggning</p>
+  <p class="doc-p">Alla automatiska jobb loggar till <code>dashboard.log</code> på servern. Loggar är tillgängliga i realtid via Loggar-fliken i navigeringen. Systemstatus (engine körandes, senaste beräkning, nästa schemalagda jobb) visas via <code>GET /api/status</code>.</p>
 </div>
 `;
 }
