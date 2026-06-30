@@ -137,10 +137,13 @@ def start(config_path: Path, db_path: Path, run_engine_fn,
             replace_existing=True,
             misfire_grace_time=3600,
         )
-        # Monthly: full backtest (new allocation signal after month-end rebalance)
+        # Monthly: full backtest on the 1st at 01:00 CET.
+        # Prices were fetched the previous evening (22:45) on the last trading day
+        # of the month, so the backtest runs with correct month-end closing prices
+        # and the new allocation is ready before European markets open (~09:00).
         _scheduler.add_job(
             _job_stocks_monthly,
-            CronTrigger(day=2, hour=6, minute=0, timezone=tz),
+            CronTrigger(day=1, hour=1, minute=0, timezone=tz),
             args=[data_root, backend_dir, run_engine_fn],
             id="stocks_monthly",
             replace_existing=True,
@@ -150,7 +153,7 @@ def start(config_path: Path, db_path: Path, run_engine_fn,
     _scheduler.start()
     log.info(
         "Scheduler started — PPM @ 09:30+18:00, ETF @ 22:30, Stocks @ 22:45 (weekdays), "
-        "Full backtest @ 06:00 on 2nd of month (CET)"
+        "Full backtest @ 01:00 on 1st of month (CET) — ready before EU open"
     )
 
 

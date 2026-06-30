@@ -3473,14 +3473,14 @@ Urval Top-7 med cap: max 3 per universum
         <td>Aktiepriser → daglig NAV-förlängning för OMXS/STOXX/SP500/Global</td>
       </tr>
       <tr>
-        <td class="font-mono">06:00</td><td>2:a varje månad</td>
-        <td>Kör fullständig sammansatt backtest — ny månadsallokering beräknas</td>
+        <td class="font-mono">01:00</td><td>1:a varje månad</td>
+        <td>Kör fullständig sammansatt backtest — ny månadsallokering beräknas med föregående månads stängningskurser</td>
         <td>Ny allokeringssignal + full historisk NAV → OMXS/STOXX/SP500/Global-sidor</td>
       </tr>
     </tbody>
   </table>
   <div class="callout callout-cyan mt-2">
-    <strong class="text-slate-300">Daglig vs månadsvis:</strong> Priser hämtas dagligen för alla ~1 200 instrument. NAV-kurvan uppdateras dagligen baserat på nuvarande månads innehav (inga nya positioner). Allokeringssignalen (vilka aktier som ska hållas) ändras bara månadsvis — 2:a i varje månad — efter att föregående månads stängningskurser finns tillgängliga.
+    <strong class="text-slate-300">Timing:</strong> Priser hämtas dagligen (22:45) för alla ~1 200 instrument. Sista handelsdagen i månaden har alla stängningskurser hemtagna till 22:45. Backtesten kör kl 01:00 natten mot den 1:a och är klar ~01:30 — 7,5 timmar innan europeiska marknader öppnar 09:00. Allokeringen kan alltså verkställas redan vid öppning den 1:a.
   </div>
 
   <p class="doc-h3">10.2 Vad som uppdateras per datakälla</p>
