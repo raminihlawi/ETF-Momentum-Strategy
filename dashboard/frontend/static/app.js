@@ -305,9 +305,9 @@ const SERIES_CFG = {
   stoxx_sammansatt_top5:   { label: "STOXX Sammansatt Top-5",    color: "#c026d3", width: 2.5 },
   stoxx_sammansatt_top7:   { label: "STOXX Sammansatt Top-7",    color: "#d946ef", width: 2.0 },
   stoxx_sammansatt_top10:  { label: "STOXX Sammansatt Top-10",   color: "#e879f9", width: 1.5 },
-  global_top7:             { label: "Global Top-7",              color: "#facc15", width: 2.5 },
-  global_top10:            { label: "Global Top-10",             color: "#fbbf24", width: 2.0 },
-  global_top15:            { label: "Global Top-15",             color: "#f59e0b", width: 1.5 },
+  global_top7:             { label: "Global Top-7 (max 3/univ)",  color: "#facc15", width: 2.5 },
+  global_top10:            { label: "Global Top-10 (max 4/univ)", color: "#fbbf24", width: 2.0 },
+  global_top15:            { label: "Global Top-15 (max 5/univ)", color: "#f59e0b", width: 1.5 },
   no_gate_top3:       { label: "OMXS No gate — Top 3",   color: "#8b5cf6", width: 2.5 },
   no_gate_top5:       { label: "OMXS No gate — Top 5",   color: "#7c3aed", width: 2.0 },
   spy_gate_top3:      { label: "OMXS SPY gate — Top 3",  color: "#10b981", width: 2.5 },
@@ -3270,9 +3270,9 @@ would_select = score(kandidat, t) &gt; portfolio_threshold
 
 // ── Global page ────────────────────────────────────────────────────
 const GLOBAL_STRATS = [
-  { key: "global_top7",  label: "Global Top-7",  color: "#facc15" },
-  { key: "global_top10", label: "Global Top-10", color: "#fbbf24" },
-  { key: "global_top15", label: "Global Top-15", color: "#f59e0b" },
+  { key: "global_top7",  label: "Global Top-7 (max 3/univ)",  color: "#facc15" },
+  { key: "global_top10", label: "Global Top-10 (max 4/univ)", color: "#fbbf24" },
+  { key: "global_top15", label: "Global Top-15 (max 5/univ)", color: "#f59e0b" },
 ];
 let globalActiveKeys = new Set(["global_top7", "global_top10"]);
 
