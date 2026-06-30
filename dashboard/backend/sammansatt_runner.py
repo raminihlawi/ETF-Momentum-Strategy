@@ -403,6 +403,126 @@ def run_all(data_root: Path, backend_dir: Path) -> dict[str, str]:
     return status
 
 
+def extend_nav_daily(data_root: Path) -> dict[str, int]:
+    """Fast daily NAV extension using current holdings' daily price performance.
+
+    Does NOT rebalance — just tracks current month's holdings.
+    Designed to run daily after price fetch, updating NAV curves without
+    re-running the full 20-year backtest. Full rebalance still runs monthly.
+
+    Returns dict of new nav points added per universe.
+    """
+    stock_dir = data_root / "stock_prices"
+    fx_sek = _load_fx(stock_dir / "fx", "SEKUSD=X")
+    fx_eur = _load_fx(stock_dir / "fx", "EURUSD=X")
+
+    def _fx_for(sub: str) -> pd.Series:
+        if sub == "omxs":  return fx_sek
+        if sub == "stoxx": return fx_eur
+        return pd.Series(dtype=float)
+
+    def _sub_and_raw(ticker: str, default_uni: str) -> tuple[str, str]:
+        if ":" in ticker:
+            u, raw = ticker.split(":", 1)
+            return u.lower(), raw
+        return default_uni, ticker
+
+    counts: dict = {}
+
+    for uni in ("omxs", "stoxx", "sp500", "global"):
+        path = data_root / "results" / f"{uni}_sammansatt_results.json"
+        if not path.exists():
+            counts[uni] = 0
+            continue
+
+        try:
+            blob = json.loads(path.read_text())
+        except Exception as e:
+            log.warning("extend_nav_daily: could not load %s: %s", path.name, e)
+            counts[uni] = 0
+            continue
+
+        strategies = blob.get("strategies", {})
+        total_new  = 0
+
+        for strat in strategies.values():
+            nav       = strat.get("nav", [])
+            alloc_log = strat.get("alloc_log", [])
+            if not nav or not alloc_log:
+                continue
+
+            holdings  = alloc_log[-1]["holdings"]  # {ticker: weight}
+            active    = {t: w for t, w in holdings.items() if t != "CASH"}
+            if not active:
+                continue
+
+            last_date = pd.Timestamp(nav[-1]["date"])
+            last_val  = float(nav[-1]["value"])
+
+            # Load price series for each holding (from a few days before last_date
+            # so we have a "previous close" anchor for the first new bar)
+            anchor    = last_date - pd.Timedelta(days=7)
+            hold_px: dict[str, tuple[float, pd.Series]] = {}
+
+            for ticker, weight in active.items():
+                sub, raw = _sub_and_raw(ticker, uni if uni != "global" else "sp500")
+                p = stock_dir / sub / f"{raw}.csv.gz"
+                if not p.exists():
+                    continue
+                try:
+                    s = pd.read_csv(p, index_col=0, parse_dates=True,
+                                    compression="gzip")["Close"].dropna()
+                    fx_s = _fx_for(sub)
+                    if not fx_s.empty:
+                        s = s * fx_s.reindex(s.index).ffill()
+                    s = s[s.index >= anchor]
+                    if len(s) >= 2:
+                        hold_px[ticker] = (float(weight), s)
+                except Exception:
+                    continue
+
+            if not hold_px:
+                continue
+
+            # Dates strictly after last_date that appear in at least one series
+            new_dates = sorted({d for _, s in hold_px.values()
+                                for d in s.index if d > last_date})
+            if not new_dates:
+                continue
+
+            new_pts: list[dict] = []
+            val = last_val
+
+            for d in new_dates:
+                port_ret = 0.0
+                n_valid  = 0
+                for ticker, (w, s) in hold_px.items():
+                    iloc = s.index.get_indexer([d], method="exact")[0]
+                    if iloc < 1:
+                        continue
+                    p1 = float(s.iloc[iloc])
+                    p0 = float(s.iloc[iloc - 1])
+                    if p0 > 0:
+                        port_ret += w * (p1 / p0 - 1)
+                        n_valid  += 1
+                if n_valid > 0:
+                    val = val * (1.0 + port_ret)
+                    new_pts.append({"date": d.strftime("%Y-%m-%d"),
+                                    "value": round(float(val), 2)})
+
+            if new_pts:
+                strat["nav"].extend(new_pts)
+                total_new += len(new_pts)
+
+        if total_new > 0:
+            path.write_text(json.dumps(blob, separators=(",", ":")))
+            log.info("extend_nav_daily(%s): +%d nav points", uni, total_new)
+
+        counts[uni] = total_new
+
+    return counts
+
+
 def results_are_stale(data_root: Path, max_age_days: int = 35) -> bool:
     """True if any sammansatt results JSON is older than max_age_days or missing."""
     import time as _time

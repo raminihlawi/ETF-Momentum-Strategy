@@ -3454,13 +3454,13 @@ Urval Top-7 med cap: max 3 per universum
     <tbody>
       <tr>
         <td class="font-mono">09:30</td><td>Vardagar</td>
-        <td>Hämtar PPM NAV (föregående dag, sent uppdaterat)</td>
-        <td>PPM-kurser → PPM-strategi-signal → <code>data.json</code></td>
+        <td>Hämtar PPM NAV (föregående dag)</td>
+        <td>PPM-kurser → PPM-signal → <code>data.json</code></td>
       </tr>
       <tr>
         <td class="font-mono">18:00</td><td>Vardagar</td>
         <td>Hämtar PPM NAV (dagens stängning, tillgänglig efter ~17:30)</td>
-        <td>PPM-kurser → PPM-strategi-signal → <code>data.json</code></td>
+        <td>PPM-kurser → PPM-signal → <code>data.json</code></td>
       </tr>
       <tr>
         <td class="font-mono">22:30</td><td>Vardagar</td>
@@ -3468,12 +3468,20 @@ Urval Top-7 med cap: max 3 per universum
         <td>ETF-priser → D1/D2/PPM-strategier → screening → <code>data.json</code></td>
       </tr>
       <tr>
+        <td class="font-mono">22:45</td><td>Vardagar</td>
+        <td>Hämtar aktiekurser (inkrementellt, bara nya bars) → uppdaterar NAV-kurvan för nuvarande månads innehav</td>
+        <td>Aktiepriser → daglig NAV-förlängning för OMXS/STOXX/SP500/Global</td>
+      </tr>
+      <tr>
         <td class="font-mono">06:00</td><td>2:a varje månad</td>
-        <td>Hämtar aktiekurser (OMXS/STOXX/SP500) + kör backtests</td>
-        <td>Aktiepriser → Sammansatt Momentum → OMXS/STOXX/SP500/Global-signaler</td>
+        <td>Kör fullständig sammansatt backtest — ny månadsallokering beräknas</td>
+        <td>Ny allokeringssignal + full historisk NAV → OMXS/STOXX/SP500/Global-sidor</td>
       </tr>
     </tbody>
   </table>
+  <div class="callout callout-cyan mt-2">
+    <strong class="text-slate-300">Daglig vs månadsvis:</strong> Priser hämtas dagligen för alla ~1 200 instrument. NAV-kurvan uppdateras dagligen baserat på nuvarande månads innehav (inga nya positioner). Allokeringssignalen (vilka aktier som ska hållas) ändras bara månadsvis — 2:a i varje månad — efter att föregående månads stängningskurser finns tillgängliga.
+  </div>
 
   <p class="doc-h3">10.2 Vad som uppdateras per datakälla</p>
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-1">

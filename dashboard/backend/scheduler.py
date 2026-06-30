@@ -57,19 +57,32 @@ def _job_etf(config_path: Path, db_path: Path, run_engine_fn) -> None:
     run_engine_fn()
 
 
-def _job_stocks(data_root: Path, backend_dir: Path, run_engine_fn) -> None:
-    """Monthly job (2nd of month, 06:00): fetch stock prices → run sammansatt backtests."""
+def _job_stocks_daily(data_root: Path, backend_dir: Path, run_engine_fn) -> None:
+    """Daily job (22:45): fetch incremental stock prices → extend NAV for current holdings."""
     from stock_fetcher import fetch_all
+    from sammansatt_runner import extend_nav_daily
+
+    try:
+        counts = fetch_all(data_root, backend_dir)
+        log.info("Stock daily fetch: %s", counts)
+    except Exception as exc:
+        log.error("Stock daily fetch failed: %s", exc)
+        return
+
+    try:
+        nav_counts = extend_nav_daily(data_root)
+        log.info("Stock NAV extension: %s", nav_counts)
+    except Exception as exc:
+        log.error("Stock NAV extension failed: %s", exc)
+
+    run_engine_fn()
+
+
+def _job_stocks_monthly(data_root: Path, backend_dir: Path, run_engine_fn) -> None:
+    """Monthly job (2nd of month, 06:00): full sammansatt backtest with new month's rebalance."""
     from sammansatt_runner import run_all
 
-    log.info("Stock monthly job: starting price fetch …")
-    try:
-        row_counts = fetch_all(data_root, backend_dir)
-        log.info("Stock fetch done: %s", row_counts)
-    except Exception as exc:
-        log.error("Stock price fetch failed: %s", exc)
-
-    log.info("Stock monthly job: running backtests …")
+    log.info("Stock monthly backtest: running all four universes …")
     try:
         status = run_all(data_root, backend_dir)
         log.info("Sammansatt backtests done: %s", status)
@@ -115,8 +128,18 @@ def start(config_path: Path, db_path: Path, run_engine_fn,
     )
 
     if data_root and backend_dir:
+        # Daily: fetch incremental prices + extend NAV for current holdings
         _scheduler.add_job(
-            _job_stocks,
+            _job_stocks_daily,
+            CronTrigger(day_of_week="mon-fri", hour=22, minute=45, timezone=tz),
+            args=[data_root, backend_dir, run_engine_fn],
+            id="stocks_daily",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        # Monthly: full backtest (new allocation signal after month-end rebalance)
+        _scheduler.add_job(
+            _job_stocks_monthly,
             CronTrigger(day=2, hour=6, minute=0, timezone=tz),
             args=[data_root, backend_dir, run_engine_fn],
             id="stocks_monthly",
@@ -126,8 +149,8 @@ def start(config_path: Path, db_path: Path, run_engine_fn,
 
     _scheduler.start()
     log.info(
-        "Scheduler started — PPM @ 09:30+18:00, ETF @ 22:30 (weekdays), "
-        "Stocks @ 06:00 on 2nd of month (CET)"
+        "Scheduler started — PPM @ 09:30+18:00, ETF @ 22:30, Stocks @ 22:45 (weekdays), "
+        "Full backtest @ 06:00 on 2nd of month (CET)"
     )
 
 
