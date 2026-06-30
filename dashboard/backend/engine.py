@@ -712,6 +712,39 @@ def run(cfg: dict = None, use_cache: bool = False):
     except Exception as e:
         log.warning("OMXS sammansatt engine failed: %s", e)
 
+    # ── STOXX Sammansatt Momentum ──────────────────────────────────────
+    try:
+        from stoxx_sammansatt_engine import run_stoxx_sammansatt
+        stoxx_sm_results, _ = run_stoxx_sammansatt(_DATA_DIR)
+        for k, v in stoxx_sm_results.items():
+            out["strategies"][k] = v
+        if stoxx_sm_results:
+            log.info("STOXX sammansatt: added %d strategies", len(stoxx_sm_results))
+    except Exception as e:
+        log.warning("STOXX sammansatt engine failed: %s", e)
+
+    # ── SP500 Sammansatt Momentum ──────────────────────────────────────
+    try:
+        from sp500_sammansatt_engine import run_sp500_sammansatt
+        sp500_sm_results, _ = run_sp500_sammansatt(_DATA_DIR)
+        for k, v in sp500_sm_results.items():
+            out["strategies"][k] = v
+        if sp500_sm_results:
+            log.info("SP500 sammansatt: added %d strategies", len(sp500_sm_results))
+    except Exception as e:
+        log.warning("SP500 sammansatt engine failed: %s", e)
+
+    # ── Global Sammansatt Momentum ─────────────────────────────────────
+    try:
+        from global_sammansatt_engine import run_global_sammansatt
+        global_results = run_global_sammansatt(_DATA_DIR)
+        for k, v in global_results.items():
+            out["strategies"][k] = v
+        if global_results:
+            log.info("Global sammansatt: added %d strategies", len(global_results))
+    except Exception as e:
+        log.warning("Global sammansatt engine failed: %s", e)
+
     # ── Screening ─────────────────────────────────────────────────────
     if screening_cfg and screening_tickers:
         try:

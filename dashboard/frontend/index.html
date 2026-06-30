@@ -51,9 +51,10 @@
     <button id="tab-funds"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('funds')">Fondmappning</button>
     <button id="tab-screen"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('screen')">Screening</button>
     <button id="tab-logs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('logs')">Loggar</button>
-    <button id="tab-stocks"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('stocks')">Aktier</button>
+    <button id="tab-stocks"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('stocks')">SP500</button>
     <button id="tab-omxs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('omxs')">OMXS</button>
     <button id="tab-stoxx"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('stoxx')">STOXX</button>
+    <button id="tab-global"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('global')">Global</button>
     <button id="tab-docs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('docs')">Dokumentation</button>
   </nav>
 </header>
@@ -167,8 +168,8 @@
   <!-- Header + variant toggles -->
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h2 class="text-sm font-semibold text-slate-300">Aktierotation — D1-ACCEL S&amp;P 500</h2>
-      <p class="text-xs text-muted mt-0.5">Point-in-time universum · 30 bps kostnad · SPY 84d regimgate · månatlig rebalansering</p>
+      <h2 class="text-sm font-semibold text-slate-300">S&amp;P 500 — Sammansatt Momentum</h2>
+      <p class="text-xs text-muted mt-0.5">Point-in-time universum · score = mean(ret3m, ret6m, ret12m) med 1M skip · absolut momentum · 30 bps · månatlig rebalansering</p>
     </div>
     <div class="flex gap-2 flex-wrap" id="stocks-toggles"></div>
   </div>
@@ -194,13 +195,10 @@
   <!-- Header + toggles -->
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h2 class="text-sm font-semibold text-slate-300">OMXS — Gate-isoleringsanalys <span class="text-amber-400 font-normal text-xs ml-2">UNVALIDATED</span></h2>
+      <h2 class="text-sm font-semibold text-slate-300">OMXS — Sammansatt Momentum</h2>
       <p class="text-xs text-muted mt-0.5">
-        Tre gate-varianter för att isolera mekanik vs gate ·
-        <span class="text-violet-400">ingen gate</span> ·
-        <span class="text-emerald-400">SPY-gate</span> ·
-        <span class="text-blue-400">XACT-OMXS30 lokal gate</span> ·
-        lb=63 win=10 ema=8 · 30 bps · survivorship bias
+        score = mean(ret3m, ret6m, ret12m) med 1M skip · absolut momentum · &gt;2 mdr SEK market cap ·
+        30 bps · månatlig rebalansering · survivorship bias
       </p>
     </div>
     <div class="flex gap-2 flex-wrap" id="omxs-toggles"></div>
@@ -230,10 +228,10 @@
   <!-- Header + toggles -->
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
-      <h2 class="text-sm font-semibold text-slate-300">Euro STOXX — D1-ACCEL rotation <span class="text-amber-400 font-normal text-xs ml-2">UNVALIDATED</span></h2>
+      <h2 class="text-sm font-semibold text-slate-300">Euro STOXX — Sammansatt Momentum</h2>
       <p class="text-xs text-muted mt-0.5">
-        Eurozonens aktier (FR/DE/NL/ES/IT/BE/AT/FI) · alla EUR ·
-        lb=63 win=10 ema=8 · gate=EXSA.DE · 30 bps · survivorship bias
+        score = mean(ret3m, ret6m, ret12m) med 1M skip · absolut momentum · EUR-priser ·
+        30 bps · månatlig rebalansering · survivorship bias
       </p>
     </div>
     <div class="flex gap-2 flex-wrap" id="stoxx-toggles"></div>
@@ -247,6 +245,27 @@
   <!-- Stats -->
   <div id="stoxx-stats"></div>
 
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     GLOBAL VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-global" class="hidden px-6 py-5 space-y-5">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300">Global Top-7 — Sammansatt Momentum</h2>
+      <p class="text-xs text-muted mt-0.5">
+        SP500 (PIT) + STOXX 600 + OMXS (large-cap) · gemensam ranking · top 7 oavsett marknad ·
+        score = mean(ret3m, ret6m, ret12m) · absolut momentum · 30 bps
+      </p>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="global-toggles"></div>
+  </div>
+  <div class="bg-panel border border-border rounded-lg">
+    <div id="global-chart" class="w-full" style="height:420px;"></div>
+  </div>
+  <div id="global-signal-row" class="grid grid-cols-1 xl:grid-cols-3 gap-5"></div>
+  <div id="global-stats"></div>
 </div>
 
 <div id="view-logs" class="hidden px-6 py-5 max-w-6xl"></div>
