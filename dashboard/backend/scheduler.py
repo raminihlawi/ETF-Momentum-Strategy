@@ -5,11 +5,9 @@ Schedule (Europe/Stockholm):
   09:30  Weekdays — fetch PPM NAV (previous day) → recalculate
   18:00  Weekdays — fetch PPM NAV (today's close) → recalculate
   22:30  Weekdays — fetch ETF prices → recalculate
+  06:00  2nd of each month — fetch stock prices → run sammansatt backtests → recalculate
 
-Two PPM jobs: 09:30 gives an early-morning signal; 18:00 catches
-today's closing NAV from kurser.txt (updated after ~17:30 market close)
-so the month-end rebalancing signal is based on that day's prices.
-
+The stock job runs on the 2nd to ensure month-end closing prices are available.
 The scheduler is started once at FastAPI startup (see main.py lifespan).
 All jobs run in a thread pool; the engine subprocess is guarded by an
 existing lock in main.py so parallel runs are harmless.
@@ -59,8 +57,31 @@ def _job_etf(config_path: Path, db_path: Path, run_engine_fn) -> None:
     run_engine_fn()
 
 
+def _job_stocks(data_root: Path, backend_dir: Path, run_engine_fn) -> None:
+    """Monthly job (2nd of month, 06:00): fetch stock prices → run sammansatt backtests."""
+    from stock_fetcher import fetch_all
+    from sammansatt_runner import run_all
+
+    log.info("Stock monthly job: starting price fetch …")
+    try:
+        row_counts = fetch_all(data_root, backend_dir)
+        log.info("Stock fetch done: %s", row_counts)
+    except Exception as exc:
+        log.error("Stock price fetch failed: %s", exc)
+
+    log.info("Stock monthly job: running backtests …")
+    try:
+        status = run_all(data_root, backend_dir)
+        log.info("Sammansatt backtests done: %s", status)
+    except Exception as exc:
+        log.error("Sammansatt backtest failed: %s", exc)
+
+    run_engine_fn()
+
+
 # ── Public API ─────────────────────────────────────────────────────
-def start(config_path: Path, db_path: Path, run_engine_fn) -> None:
+def start(config_path: Path, db_path: Path, run_engine_fn,
+          data_root: Path | None = None, backend_dir: Path | None = None) -> None:
     global _scheduler
     if _scheduler and _scheduler.running:
         return
@@ -93,9 +114,20 @@ def start(config_path: Path, db_path: Path, run_engine_fn) -> None:
         misfire_grace_time=3600,
     )
 
+    if data_root and backend_dir:
+        _scheduler.add_job(
+            _job_stocks,
+            CronTrigger(day=2, hour=6, minute=0, timezone=tz),
+            args=[data_root, backend_dir, run_engine_fn],
+            id="stocks_monthly",
+            replace_existing=True,
+            misfire_grace_time=7200,
+        )
+
     _scheduler.start()
     log.info(
-        "Scheduler started — PPM @ 09:30 + 18:00 CET, ETF @ 22:30 CET (weekdays)"
+        "Scheduler started — PPM @ 09:30+18:00, ETF @ 22:30 (weekdays), "
+        "Stocks @ 06:00 on 2nd of month (CET)"
     )
 
 

@@ -45,6 +45,28 @@ STATIC_DATA_PATH = FRONTEND / "static" / "data.json"
 
 SECRET = os.getenv("DASHBOARD_SECRET", "")
 _engine_running = threading.Event()
+_stocks_running = threading.Event()
+
+
+# ── Stock runner (fetch + backtest) ───────────────────────────────
+def _run_stocks_bg():
+    if _stocks_running.is_set():
+        log.info("Stock runner already in progress, skipping")
+        return
+    _stocks_running.set()
+    try:
+        from stock_fetcher import fetch_all
+        from sammansatt_runner import run_all
+        log.info("Stock refresh: fetching prices …")
+        fetch_all(_DATA_DIR, BASE_DIR)
+        log.info("Stock refresh: running backtests …")
+        run_all(_DATA_DIR, BASE_DIR)
+        log.info("Stock refresh: complete — triggering engine recalculate")
+    except Exception as exc:
+        log.error("Stock refresh failed: %s", exc)
+    finally:
+        _stocks_running.clear()
+    _run_engine_bg()
 
 
 # ── Engine runner ──────────────────────────────────────────────────
@@ -79,12 +101,22 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         log.error("DB init failed: %s", exc)
 
-    # Start scheduler
+    # Start scheduler (includes monthly stock job)
     try:
         import scheduler as sched
-        sched.start(CONFIG_PATH, DB_PATH, _run_engine_bg)
+        sched.start(CONFIG_PATH, DB_PATH, _run_engine_bg,
+                    data_root=_DATA_DIR, backend_dir=BASE_DIR)
     except Exception as exc:
         log.error("Scheduler start failed: %s", exc)
+
+    # Kick off stock backtest in background if results are stale (>35 days)
+    try:
+        from sammansatt_runner import results_are_stale
+        if results_are_stale(_DATA_DIR):
+            log.info("Stock results stale or missing — queuing background refresh")
+            threading.Thread(target=_run_stocks_bg, daemon=True).start()
+    except Exception as exc:
+        log.error("Stale-check failed: %s", exc)
 
     yield
 
@@ -172,6 +204,17 @@ def get_status():
 def recalculate(bg: BackgroundTasks, _=Depends(require_auth)):
     bg.add_task(_run_engine_bg)
     return {"status": "started"}
+
+
+@app.post("/api/recalculate-stocks")
+def recalculate_stocks(bg: BackgroundTasks, _=Depends(require_auth)):
+    """Fetch fresh stock prices for all universes, re-run sammansatt backtests, recalculate."""
+    if _stocks_running.is_set():
+        return {"status": "already_running",
+                "message": "Stock refresh already in progress"}
+    bg.add_task(_run_stocks_bg)
+    return {"status": "started",
+            "message": "Stock price fetch + sammansatt backtest queued (~30-60 min first run)"}
 
 
 @app.get("/api/logs")
