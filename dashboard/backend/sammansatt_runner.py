@@ -523,6 +523,255 @@ def extend_nav_daily(data_root: Path) -> dict[str, int]:
     return counts
 
 
+def rebalance_due(data_root: Path) -> bool:
+    """True if the last trading day of the previous calendar month is newer than
+    the last processed rebalance date in the OMXS results (used as reference)."""
+    path = data_root / "results" / "omxs_sammansatt_results.json"
+    if not path.exists():
+        return False
+    try:
+        blob        = json.loads(path.read_text())
+        first_strat = next(iter(blob.get("strategies", {}).values()))
+        last_alloc  = pd.Timestamp(first_strat["alloc_log"][-1]["date"])
+        # Rebalance is due if last alloc is before this calendar month
+        first_of_month = pd.Timestamp.now().normalize().replace(day=1)
+        return last_alloc < first_of_month
+    except Exception:
+        return False
+
+
+def _load_recent_for_scoring(
+    universe_dir: Path, fx: pd.Series, up_to: pd.Timestamp, n: int = 320
+) -> dict[str, pd.Series]:
+    """Load last n bars up to `up_to` per ticker — enough for score computation."""
+    out: dict = {}
+    for f in sorted(universe_dir.glob("*.csv.gz")):
+        ticker = f.name.replace(".csv.gz", "")
+        try:
+            s = pd.read_csv(f, index_col=0, parse_dates=True,
+                            compression="gzip")["Close"].dropna()
+            s = s[s.index <= up_to]
+            if len(s) < MIN_PTS:
+                continue
+            s = s.iloc[-(n + 10):]
+            if not fx.empty:
+                s = s * fx.reindex(s.index).ffill()
+            out[ticker] = s
+        except Exception:
+            pass
+    return out
+
+
+def _nav_segment(
+    holdings: dict, from_date: pd.Timestamp, to_date: pd.Timestamp,
+    start_val: float, stock_dir: Path,
+    fx_sek: pd.Series, fx_eur: pd.Series, default_sub: str | None = None,
+) -> list[dict]:
+    """Compute daily NAV from from_date to to_date using given holdings."""
+    anchor   = from_date - pd.Timedelta(days=7)
+    hold_px: dict = {}
+
+    for ticker, weight in holdings.items():
+        if ticker == "CASH":
+            continue
+        if ":" in ticker:
+            u, raw = ticker.split(":", 1)
+            sub = u.lower()
+        else:
+            sub = default_sub or "sp500"
+            raw = ticker
+        fx = fx_sek if sub == "omxs" else (fx_eur if sub == "stoxx" else pd.Series(dtype=float))
+        p  = stock_dir / sub / f"{raw}.csv.gz"
+        if not p.exists():
+            continue
+        try:
+            s = pd.read_csv(p, index_col=0, parse_dates=True,
+                            compression="gzip")["Close"].dropna()
+            if not fx.empty:
+                s = s * fx.reindex(s.index).ffill()
+            s = s[(s.index >= anchor) & (s.index <= to_date)]
+            if len(s) >= 2:
+                hold_px[ticker] = (float(weight), s)
+        except Exception:
+            continue
+
+    if not hold_px:
+        return []
+
+    new_dates = sorted({d for _, s in hold_px.values()
+                        for d in s.index if from_date < d <= to_date})
+    pts: list = []
+    val = start_val
+    for d in new_dates:
+        ret = 0.0; n_v = 0
+        for _, (w, s) in hold_px.items():
+            iloc = s.index.get_indexer([d], method="exact")[0]
+            if iloc < 1:
+                continue
+            p1 = float(s.iloc[iloc]); p0 = float(s.iloc[iloc - 1])
+            if p0 > 0:
+                ret += w * (p1 / p0 - 1); n_v += 1
+        if n_v > 0:
+            val = val * (1.0 + ret)
+            pts.append({"date": d.strftime("%Y-%m-%d"), "value": round(float(val), 2)})
+    return pts
+
+
+def run_monthly_rebalance(data_root: Path, backend_dir: Path) -> dict[str, str]:
+    """Incremental monthly rebalance — runs in ~1 min instead of 30 min.
+
+    For each universe:
+    1. Load recent prices (last 320 days) — enough to compute momentum scores
+    2. Score all tickers at the rebalance date (last trading day of prev month)
+    3. Select new top-N allocation (with max-per-universe cap for global)
+    4. Extend NAV from last alloc date to rebalance date using OLD holdings
+    5. Apply transaction cost on portfolio turnover
+    6. Append new alloc_log entry, update stats and current_signal
+    """
+    stock_dir   = data_root / "stock_prices"
+    results_dir = data_root / "results"
+
+    fx_sek = _load_fx(stock_dir / "fx", "SEKUSD=X")
+    fx_eur = _load_fx(stock_dir / "fx", "EURUSD=X")
+    spy    = _load_fx(stock_dir / "gates", "SPY")
+
+    # Rebalance date = last trading day of the previous calendar month
+    first_of_month = pd.Timestamp.now().normalize().replace(day=1)
+    prev_spy = spy[spy.index < first_of_month]
+    if prev_spy.empty:
+        log.warning("run_monthly_rebalance: no gate data")
+        return {}
+    rebal_date = prev_spy.index[-1]
+    log.info("run_monthly_rebalance: rebal_date=%s", rebal_date.date())
+
+    # SP500 PIT lookup
+    pit = pd.read_csv(backend_dir.parent / "data" / "sp500_ticker_start_end.csv",
+                      parse_dates=["start_date", "end_date"])
+    pit["end_date"] = pit["end_date"].fillna(pd.Timestamp("2099-01-01"))
+
+    def pit_ok(raw_tk: str) -> bool:
+        return bool(((pit.start_date <= rebal_date) & (pit.end_date > rebal_date) &
+                     (pit.ticker == raw_tk)).any())
+
+    # Load recent prices once per sub-universe
+    log.info("Loading recent prices …")
+    omxs_px  = _load_recent_for_scoring(stock_dir / "omxs",  fx_sek, rebal_date)
+    stoxx_px = _load_recent_for_scoring(stock_dir / "stoxx", fx_eur, rebal_date)
+    sp500_px = {tk: s for tk, s in
+                _load_recent_for_scoring(stock_dir / "sp500", pd.Series(dtype=float), rebal_date).items()
+                if pit_ok(tk)}
+
+    # Build tagged global pool
+    global_px:  dict = {}
+    global_tag: dict = {}
+    for tk, s in omxs_px.items():  global_px[f"OMXS:{tk}"]  = s; global_tag[f"OMXS:{tk}"]  = "OMXS"
+    for tk, s in stoxx_px.items(): global_px[f"STOXX:{tk}"] = s; global_tag[f"STOXX:{tk}"] = "STOXX"
+    for tk, s in sp500_px.items(): global_px[f"SP500:{tk}"] = s; global_tag[f"SP500:{tk}"] = "SP500"
+
+    status: dict = {}
+
+    for uni in ("omxs", "stoxx", "sp500", "global"):
+        path = results_dir / f"{uni}_sammansatt_results.json"
+        if not path.exists():
+            status[uni] = "no_results"; continue
+
+        try:
+            blob   = json.loads(path.read_text())
+            strats = blob.get("strategies", {})
+            first  = next(iter(strats.values()))
+            last_alloc_date = pd.Timestamp(first["alloc_log"][-1]["date"])
+
+            if rebal_date <= last_alloc_date:
+                log.info("%s: already at %s", uni, last_alloc_date.date())
+                status[uni] = "up_to_date"; continue
+
+            # Compute scores for this universe
+            if uni == "omxs":
+                pool  = omxs_px;  tag_map = None; def_sub = "omxs"
+            elif uni == "stoxx":
+                pool  = stoxx_px; tag_map = None; def_sub = "stoxx"
+            elif uni == "sp500":
+                pool  = sp500_px; tag_map = None; def_sub = "sp500"
+            else:
+                pool  = global_px; tag_map = global_tag; def_sub = None
+
+            scores = {tk: _composite_score(s.values, len(s) - 1)
+                      for tk, s in pool.items()}
+            scores = {tk: sc for tk, sc in scores.items()
+                      if np.isfinite(sc) and sc > 0}
+
+            for strat_key, strat in strats.items():
+                params = strat.get("params", {})
+                top_n  = params.get("top_n", 7)
+                max_u  = params.get("max_per_universe")  # None or dict
+
+                ranked = sorted(scores, key=scores.__getitem__, reverse=True)
+                if max_u and tag_map:
+                    chosen: list = []; counts: dict = {}
+                    for t in ranked:
+                        u   = tag_map.get(t, "")
+                        cap = max_u.get(u, top_n) if isinstance(max_u, dict) else top_n
+                        if counts.get(u, 0) < cap:
+                            chosen.append(t); counts[u] = counts.get(u, 0) + 1
+                        if len(chosen) >= top_n: break
+                else:
+                    chosen = ranked[:top_n]
+
+                new_h = ({t: round(1.0 / len(chosen), 6) for t in chosen}
+                         if chosen else {"CASH": 1.0})
+
+                # Extend NAV from last alloc date to rebal_date using OLD holdings
+                last_nav      = strat["nav"][-1]
+                last_nav_date = pd.Timestamp(last_nav["date"])
+                old_h         = strat["alloc_log"][-1]["holdings"]
+
+                # Strip any extend_nav_daily points (they may be past last alloc date)
+                strat["nav"] = [p for p in strat["nav"]
+                                if p["date"] <= last_alloc_date.strftime("%Y-%m-%d")]
+                strat["nav"].append(last_nav) if not strat["nav"] or \
+                    strat["nav"][-1]["date"] < last_nav["date"] else None
+                anchor_val = float(strat["nav"][-1]["value"])
+                anchor_date = pd.Timestamp(strat["nav"][-1]["date"])
+
+                seg = _nav_segment(old_h, anchor_date, rebal_date, anchor_val,
+                                   stock_dir, fx_sek, fx_eur, def_sub)
+
+                # Transaction cost on rebalanced fraction
+                port_val = seg[-1]["value"] if seg else anchor_val
+                old_set  = set(old_h) - {"CASH"}
+                new_set  = set(new_h) - {"CASH"}
+                turnover = len(old_set.symmetric_difference(new_set)) / max(len(old_set | new_set), 1)
+                cost     = port_val * turnover * COST
+                if seg:
+                    seg[-1]["value"] = round(seg[-1]["value"] - cost, 2)
+
+                strat["nav"].extend(seg)
+                strat["alloc_log"].append({
+                    "date":     rebal_date.strftime("%Y-%m-%d"),
+                    "holdings": new_h,
+                })
+                strat["stats"]          = _calc_stats(strat["nav"])
+                strat["current_signal"] = {
+                    "date":     rebal_date.strftime("%Y-%m-%d"),
+                    "holdings": [
+                        {"ticker": t, "weight": w,
+                         **({"universe": tag_map[t]} if tag_map and t in tag_map else {})}
+                        for t, w in new_h.items()
+                    ],
+                }
+                log.info("%s/%s → %s", uni, strat_key, list(new_h.keys()))
+
+            blob["generated_at"] = pd.Timestamp.now().isoformat()
+            path.write_text(json.dumps(blob, separators=(",", ":")))
+            status[uni] = "ok"
+
+        except Exception as e:
+            log.error("Monthly rebalance failed for %s: %s", uni, e, exc_info=True)
+            status[uni] = f"error: {e}"
+
+    return status
+
+
 def results_are_stale(data_root: Path, max_age_days: int = 35) -> bool:
     """True if any sammansatt results JSON is older than max_age_days or missing."""
     import time as _time

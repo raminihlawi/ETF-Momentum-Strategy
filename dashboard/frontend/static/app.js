@@ -3469,18 +3469,18 @@ Urval Top-7 med cap: max 3 per universum
       </tr>
       <tr>
         <td class="font-mono">22:45</td><td>Vardagar</td>
-        <td>Hämtar aktiekurser (inkrementellt, bara nya bars) → uppdaterar NAV-kurvan för nuvarande månads innehav</td>
-        <td>Aktiepriser → daglig NAV-förlängning för OMXS/STOXX/SP500/Global</td>
+        <td>Hämtar aktiekurser (inkrementellt) → om ny månad: kör inkrementell rebalansering (~1 min) → annars: förlänger NAV-kurvan för nuvarande innehav</td>
+        <td>Aktiepriser + ny allokering (om månadsskifte) eller daglig NAV-uppdatering</td>
       </tr>
       <tr>
         <td class="font-mono">01:00</td><td>1:a varje månad</td>
-        <td>Kör fullständig sammansatt backtest — ny månadsallokering beräknas med föregående månads stängningskurser</td>
-        <td>Ny allokeringssignal + full historisk NAV → OMXS/STOXX/SP500/Global-sidor</td>
+        <td>Säkerhetsnät: kör inkrementell rebalansering om inte redan gjord (täcker fall där sista handelsdagen är fredag/helg)</td>
+        <td>Ny allokering klar senast 01:30 — 7.5h innan europeiska marknader öppnar</td>
       </tr>
     </tbody>
   </table>
   <div class="callout callout-cyan mt-2">
-    <strong class="text-slate-300">Timing:</strong> Priser hämtas dagligen (22:45) för alla ~1 200 instrument. Sista handelsdagen i månaden har alla stängningskurser hemtagna till 22:45. Backtesten kör kl 01:00 natten mot den 1:a och är klar ~01:30 — 7,5 timmar innan europeiska marknader öppnar 09:00. Allokeringen kan alltså verkställas redan vid öppning den 1:a.
+    <strong class="text-slate-300">Timing:</strong> Priser hämtas dagligen (22:45) för alla ~1 200 instrument. När en ny månad detekteras kör 22:45-jobbet en inkrementell rebalansering direkt — tar ~1 minut istället för 30 minuter eftersom bara de senaste 320 dagarna per aktie behöver laddas. Om sista handelsdagen råkar vara helg körs säkerhetsnätet kl 01:00 natten mot den 1:a. Allokeringen är alltid klar långt innan europeiska marknader öppnar 09:00.
   </div>
 
   <p class="doc-h3">10.2 Vad som uppdateras per datakälla</p>

@@ -58,9 +58,14 @@ def _job_etf(config_path: Path, db_path: Path, run_engine_fn) -> None:
 
 
 def _job_stocks_daily(data_root: Path, backend_dir: Path, run_engine_fn) -> None:
-    """Daily job (22:45): fetch incremental stock prices → extend NAV for current holdings."""
+    """Daily job (22:45 weekdays): fetch stock prices, then either rebalance or extend NAV.
+
+    If the previous calendar month has a new unprocessed rebalance date →
+    run incremental rebalance (~1 min). Otherwise just extend the NAV curve
+    for the current holdings' daily performance (~seconds).
+    """
     from stock_fetcher import fetch_all
-    from sammansatt_runner import extend_nav_daily
+    from sammansatt_runner import extend_nav_daily, run_monthly_rebalance, rebalance_due
 
     try:
         counts = fetch_all(data_root, backend_dir)
@@ -70,24 +75,40 @@ def _job_stocks_daily(data_root: Path, backend_dir: Path, run_engine_fn) -> None
         return
 
     try:
-        nav_counts = extend_nav_daily(data_root)
-        log.info("Stock NAV extension: %s", nav_counts)
+        if rebalance_due(data_root):
+            log.info("Monthly rebalance triggered from daily job")
+            status = run_monthly_rebalance(data_root, backend_dir)
+            log.info("Monthly rebalance: %s", status)
+        else:
+            nav_counts = extend_nav_daily(data_root)
+            log.info("Stock NAV extension: %s", nav_counts)
     except Exception as exc:
-        log.error("Stock NAV extension failed: %s", exc)
+        log.error("Stock update failed: %s", exc)
 
     run_engine_fn()
 
 
 def _job_stocks_monthly(data_root: Path, backend_dir: Path, run_engine_fn) -> None:
-    """Monthly job (2nd of month, 06:00): full sammansatt backtest with new month's rebalance."""
-    from sammansatt_runner import run_all
+    """Safety-net job (1st of month 01:00): incremental rebalance if not yet done.
 
-    log.info("Stock monthly backtest: running all four universes …")
+    Handles the case where the last trading day of the month falls on a
+    weekend (daily job skips weekends, so the rebalance would otherwise
+    wait until Monday evening). This job ensures the allocation is ready
+    before European markets open at 09:00 on the 1st.
+    """
+    from sammansatt_runner import run_monthly_rebalance, rebalance_due
+
+    if not rebalance_due(data_root):
+        log.info("Monthly safety-net job: rebalance already done, skipping")
+        run_engine_fn()
+        return
+
+    log.info("Monthly safety-net job: running incremental rebalance …")
     try:
-        status = run_all(data_root, backend_dir)
-        log.info("Sammansatt backtests done: %s", status)
+        status = run_monthly_rebalance(data_root, backend_dir)
+        log.info("Monthly rebalance (safety-net): %s", status)
     except Exception as exc:
-        log.error("Sammansatt backtest failed: %s", exc)
+        log.error("Monthly rebalance failed: %s", exc)
 
     run_engine_fn()
 
