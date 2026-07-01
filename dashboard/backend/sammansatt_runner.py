@@ -75,10 +75,16 @@ def _alloc_matrix(log_entries: list[dict]) -> dict:
     }
 
 
+def _clean_ticker(name: str) -> str:
+    """Strip any accidental file extension left in ticker names."""
+    import re
+    return re.sub(r"\.(csv|gz|parquet)$", "", name, flags=re.IGNORECASE)
+
+
 def _load_prices(universe_dir: Path, min_pts: int = MIN_PTS) -> dict[str, pd.DataFrame]:
     prices = {}
     for f in sorted(universe_dir.glob("*.csv.gz")):
-        ticker = f.name.replace(".csv.gz", "")
+        ticker = _clean_ticker(f.name.replace(".csv.gz", ""))
         try:
             df = pd.read_csv(f, index_col=0, parse_dates=True, compression="gzip")
             if "Close" not in df.columns or len(df) < min_pts:
@@ -616,7 +622,7 @@ def _load_recent_for_scoring(
     """Load last n bars up to `up_to` per ticker — enough for score computation."""
     out: dict = {}
     for f in sorted(universe_dir.glob("*.csv.gz")):
-        ticker = f.name.replace(".csv.gz", "")
+        ticker = _clean_ticker(f.name.replace(".csv.gz", ""))
         try:
             s = pd.read_csv(f, index_col=0, parse_dates=True,
                             compression="gzip")["Close"].dropna()
