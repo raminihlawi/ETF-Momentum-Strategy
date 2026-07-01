@@ -3119,21 +3119,21 @@ risk_off = annars → sleeve viktas 100 % till IBTS.L (kortränta)
 
   <p class="doc-h3">4.1 Universum</p>
   <table class="doc-tbl mt-1">
-    <thead><tr><th>PPM-nr</th><th>Namn</th><th>Roll</th></tr></thead>
+    <thead><tr><th>PPM-nr</th><th>Fondnamn</th><th>Roll</th></tr></thead>
     <tbody>
       <tr><td>581371</td><td>AP7 Aktiefond</td><td>Passiv global med hävstång — möjligt rotationsval OCH benchmark</td></tr>
-      <tr><td>283408</td><td>Teknikfond</td><td>Sektorfond — IT</td></tr>
-      <tr><td>644005</td><td>Hälsovårdsfond</td><td>Sektorfond — Healthcare</td></tr>
-      <tr><td>517748</td><td>Energifond</td><td>Sektorfond — Energy</td></tr>
-      <tr><td>481911</td><td>Råvaror/Mining</td><td>Sektorfond — Mining &amp; Materials</td></tr>
-      <tr><td>479550</td><td>Consumer Brands</td><td>Sektorfond — Consumer Staples/Brands</td></tr>
-      <tr><td>768556</td><td>US Value</td><td>Faktor — USA Värde</td></tr>
-      <tr><td>916354</td><td>US Small Cap</td><td>Faktor — USA Småbolag</td></tr>
-      <tr><td>456475</td><td>US Quality</td><td>Faktor — USA Kvalitet</td></tr>
-      <tr><td>163923</td><td>US Growth</td><td>Faktor — USA Tillväxt</td></tr>
-      <tr><td>182759</td><td>EUR Small Cap</td><td>Faktor — Europa Småbolag</td></tr>
-      <tr><td>538462</td><td>EUR Value</td><td>Faktor — Europa Värde</td></tr>
-      <tr><td>162099</td><td>Multifactor</td><td>Faktor — Global multifaktor</td></tr>
+      <tr><td>283408</td><td>Swedbank Robur Technology A</td><td>Sektorfond — IT</td></tr>
+      <tr><td>644005</td><td>Handelsbanken Hälsovård Tema A1</td><td>Sektorfond — Healthcare</td></tr>
+      <tr><td>517748</td><td>BlackRock World Energy A2</td><td>Sektorfond — Energy</td></tr>
+      <tr><td>481911</td><td>BlackRock World Mining A2</td><td>Sektorfond — Mining &amp; Materials</td></tr>
+      <tr><td>479550</td><td>Seligson Global Top 25 Brands A</td><td>Sektorfond — Consumer Staples/Brands</td></tr>
+      <tr><td>768556</td><td>BlackRock US Basic Value A2</td><td>Faktor — USA Värde</td></tr>
+      <tr><td>916354</td><td>SEB Nordamerikafond Små och Medelstora A</td><td>Faktor — USA Småbolag</td></tr>
+      <tr><td>456475</td><td>Länsförsäkringar USA Aktiv A</td><td>Faktor — USA Kvalitet</td></tr>
+      <tr><td>163923</td><td>Öhman Global Growth A</td><td>Faktor — USA Tillväxt</td></tr>
+      <tr><td>182759</td><td>Lannebo Europa Småbolag A</td><td>Faktor — Europa Småbolag</td></tr>
+      <tr><td>538462</td><td>AMF Aktiefond Europa</td><td>Faktor — Europa Värde</td></tr>
+      <tr><td>162099</td><td>Storebrand Global Multifactor A</td><td>Faktor — Global multifaktor</td></tr>
       <tr><td>545541</td><td>AP7 Räntefond</td><td>Defensivt alternativ — väljs av abs-mom-filter</td></tr>
     </tbody>
   </table>
