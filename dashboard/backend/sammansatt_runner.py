@@ -524,25 +524,38 @@ def extend_nav_daily(data_root: Path) -> dict[str, int]:
 
 
 def rebalance_due(data_root: Path) -> bool:
-    """True when it is time to rebalance into the next month's allocation.
+    """True if the last completed month's closing prices are not yet processed.
 
-    Triggers on or after the last calendar day of the month that follows the
-    last processed rebalance. Examples:
-      last_alloc = Sep 30 → trigger on/after Oct 31
-      last_alloc = Oct 31 → trigger on/after Nov 30
-    This ensures prices for the full month are available before we compute
-    the new allocation.
+    Logic: find the last SPY date in the previous calendar month. If that
+    date is strictly newer than the last alloc_log entry, a rebalance is due.
+
+    Examples:
+      last_alloc=Jun 26, today=Jul 1  → prev-month-end=Jun 30 > Jun 26 → True
+      last_alloc=Jun 30, today=Jul 15 → prev-month-end=Jun 30 ≤ Jun 30 → False
+      last_alloc=Jun 30, today=Aug 1  → prev-month-end=Jul 31 > Jun 30 → True
     """
-    path = data_root / "results" / "omxs_sammansatt_results.json"
-    if not path.exists():
+    results_path = data_root / "results" / "omxs_sammansatt_results.json"
+    spy_path     = data_root / "stock_prices" / "gates" / "SPY.csv.gz"
+    if not results_path.exists() or not spy_path.exists():
         return False
     try:
-        blob        = json.loads(path.read_text())
+        blob        = json.loads(results_path.read_text())
         first_strat = next(iter(blob.get("strategies", {}).values()))
         last_alloc  = pd.Timestamp(first_strat["alloc_log"][-1]["date"])
-        # Last calendar day of the month after last_alloc's month
-        trigger = (last_alloc + pd.DateOffset(months=1) + pd.offsets.MonthEnd(0)).normalize()
-        return pd.Timestamp.now().normalize() >= trigger
+        today       = pd.Timestamp.now().normalize()
+
+        # Last calendar day of the previous month
+        prev_cal_end = (today.replace(day=1) - pd.Timedelta(days=1)).normalize()
+        if prev_cal_end <= last_alloc:
+            return False  # last_alloc is already at or past previous month-end
+
+        # Find the last SPY trading date in or before prev_cal_end
+        spy = pd.read_csv(spy_path, index_col=0, parse_dates=True,
+                          compression="gzip")["Close"].dropna()
+        prev = spy[spy.index <= prev_cal_end]
+        if prev.empty:
+            return False
+        return prev.index[-1] > last_alloc
     except Exception:
         return False
 
@@ -642,14 +655,15 @@ def run_monthly_rebalance(data_root: Path, backend_dir: Path) -> dict[str, str]:
     fx_eur = _load_fx(stock_dir / "fx", "EURUSD=X")
     spy    = _load_fx(stock_dir / "gates", "SPY")
 
-    # Rebalance date = most recent SPY date (US close is at 22:00 CET, we run at 22:45)
-    # Use "before tomorrow" so we get today's close even when today is month-end
-    tomorrow = pd.Timestamp.now().normalize() + pd.Timedelta(days=1)
-    eligible = spy[spy.index < tomorrow]
-    if eligible.empty:
-        log.warning("run_monthly_rebalance: no gate data")
+    # Rebalance date = last SPY trading day of the previous calendar month
+    # (consistent with rebalance_due logic)
+    today        = pd.Timestamp.now().normalize()
+    prev_cal_end = (today.replace(day=1) - pd.Timedelta(days=1)).normalize()
+    prev_spy     = spy[spy.index <= prev_cal_end]
+    if prev_spy.empty:
+        log.warning("run_monthly_rebalance: no gate data for previous month")
         return {}
-    rebal_date = eligible.index[-1]
+    rebal_date = prev_spy.index[-1]
     log.info("run_monthly_rebalance: rebal_date=%s", rebal_date.date())
 
     # SP500 PIT lookup
