@@ -5,6 +5,7 @@ Reads cached prices from {data_root}/stock_prices/ and produces:
   {data_root}/results/omxs_sammansatt_results.json
   {data_root}/results/stoxx_sammansatt_results.json
   {data_root}/results/sp500_sammansatt_results.json
+  {data_root}/results/nasdaq_sammansatt_results.json
   {data_root}/results/global_sammansatt_results.json
 
 Strategy: score = mean(ret_3m, ret_6m, ret_12m) with 1M skip.
@@ -118,8 +119,12 @@ def _run_backtest(
     top_n: int = 7,
     max_per_universe: dict[str, int] | None = None,  # {"SP500": 3, ...}
     tag: dict[str, str] | None = None,                # ticker → universe
-) -> tuple[list[dict], list[dict]]:
-    """Core monthly backtest. Returns (nav, alloc_log)."""
+) -> tuple[list[dict], list[dict], dict]:
+    """Core monthly backtest. Returns (nav, alloc_log, last_scores).
+
+    last_scores is the composite score for ALL tickers at the final rebalance
+    date (NaN values excluded). Used for the all-instrument screener.
+    """
     tickers   = list(all_prices.keys())
     all_dates = sorted({d for df in all_prices.values()
                         for d in df.index if str(d)[:10] >= START})
@@ -137,6 +142,7 @@ def _run_backtest(
     nav:    list = []
     alloc_log: list = []
     pending: dict | None = None
+    last_scores: dict = {}
 
     for date in dates:
         if date < pd.Timestamp(START):
@@ -172,6 +178,9 @@ def _run_backtest(
 
         scores = {t: _composite_score(arrs[t], pos)
                   for t in tickers if t in arrs and _ok(t)}
+        # Capture all finite scores at this rebalance date
+        last_scores = {t: float(s) for t, s in scores.items() if np.isfinite(s)}
+
         positive = {t: s for t, s in scores.items() if np.isfinite(s) and s > 0}
 
         if not positive:
@@ -205,7 +214,7 @@ def _run_backtest(
         alloc_log.append({"date": date_str,
                           "holdings": {t: round(w, 6) for t in chosen}})
 
-    return nav, alloc_log
+    return nav, alloc_log, last_scores
 
 
 def _bench_nav(series: pd.Series, start: str = START) -> list[dict]:
@@ -249,9 +258,10 @@ def run_omxs(data_root: Path) -> dict:
     bench_s   = _bench_nav(omx_usd)
 
     strategies: dict = {}
+    all_scores: dict = {}
     for top_n in (5, 7, 10):
         log.info("OMXS Top-%d …", top_n)
-        nav, al = _run_backtest(prices_usd, top_n=top_n)
+        nav, al, last_sc = _run_backtest(prices_usd, top_n=top_n)
         key = f"omxs_sammansatt_top{top_n}"
         strategies[key] = {
             "label":          f"OMXS Sammansatt Top-{top_n}",
@@ -265,9 +275,11 @@ def run_omxs(data_root: Path) -> dict:
             "params":         {"top_n": top_n, "cost": COST},
             "benchmark":      {"label": "OMXS30", "series": bench_s},
         }
+        all_scores = last_sc  # same universe, same scores for all top_n
     return {"generated_at": pd.Timestamp.now().isoformat(),
             "strategies": strategies,
-            "benchmark":  {"label": "OMXS30", "series": bench_s}}
+            "benchmark":  {"label": "OMXS30", "series": bench_s},
+            "all_scores": all_scores}
 
 
 def run_stoxx(data_root: Path) -> dict:
@@ -280,9 +292,10 @@ def run_stoxx(data_root: Path) -> dict:
     bench_s   = _bench_nav((exsa_raw * fx.reindex(exsa_raw.index).ffill()).dropna())
 
     strategies: dict = {}
+    all_scores: dict = {}
     for top_n in (5, 7, 10):
         log.info("STOXX Top-%d …", top_n)
-        nav, al = _run_backtest(prices_usd, top_n=top_n)
+        nav, al, last_sc = _run_backtest(prices_usd, top_n=top_n)
         key = f"stoxx_sammansatt_top{top_n}"
         strategies[key] = {
             "label":          f"STOXX Sammansatt Top-{top_n}",
@@ -296,6 +309,7 @@ def run_stoxx(data_root: Path) -> dict:
             "params":         {"top_n": top_n, "cost": COST},
             "benchmark":      {"label": "EXSA.DE (USD)", "series": bench_s},
         }
+        all_scores = last_sc
     # Collect all tickers that have appeared in any allocation
     all_tickers = {t for s in strategies.values()
                    for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
@@ -308,7 +322,8 @@ def run_stoxx(data_root: Path) -> dict:
     return {"generated_at": pd.Timestamp.now().isoformat(),
             "strategies":   strategies,
             "benchmark":    {"label": "EXSA.DE (USD)", "series": bench_s},
-            "company_info": company_info}
+            "company_info": company_info,
+            "all_scores":   all_scores}
 
 
 def run_sp500(data_root: Path, backend_dir: Path) -> dict:
@@ -328,9 +343,10 @@ def run_sp500(data_root: Path, backend_dir: Path) -> dict:
     bench_s   = _bench_nav(spy_raw)
 
     strategies: dict = {}
+    all_scores: dict = {}
     for top_n in (5, 7, 10):
         log.info("SP500 Top-%d …", top_n)
-        nav, al = _run_backtest(prices, valid_fn=valid_sp500, top_n=top_n)
+        nav, al, last_sc = _run_backtest(prices, valid_fn=valid_sp500, top_n=top_n)
         key = f"sp500_sammansatt_top{top_n}"
         strategies[key] = {
             "label":          f"SP500 Sammansatt Top-{top_n}",
@@ -344,6 +360,7 @@ def run_sp500(data_root: Path, backend_dir: Path) -> dict:
             "params":         {"top_n": top_n, "cost": COST},
             "benchmark":      {"label": "SPY", "series": bench_s},
         }
+        all_scores = last_sc
     all_tickers = {t for s in strategies.values()
                    for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
     existing = {}
@@ -355,7 +372,51 @@ def run_sp500(data_root: Path, backend_dir: Path) -> dict:
     return {"generated_at": pd.Timestamp.now().isoformat(),
             "strategies":   strategies,
             "benchmark":    {"label": "SPY", "series": bench_s},
-            "company_info": company_info}
+            "company_info": company_info,
+            "all_scores":   all_scores}
+
+
+def run_nasdaq(data_root: Path) -> dict:
+    stock_dir = data_root / "stock_prices"
+    prices    = _load_prices(stock_dir / "nasdaq")
+    # Prices are already in USD — no FX conversion needed
+
+    qqq_raw  = _load_fx(stock_dir / "gates", "QQQ")
+    bench_s  = _bench_nav(qqq_raw)
+
+    strategies: dict = {}
+    all_scores: dict = {}
+    for top_n in (5, 7, 10):
+        log.info("Nasdaq Top-%d …", top_n)
+        nav, al, last_sc = _run_backtest(prices, top_n=top_n)
+        key = f"nasdaq_sammansatt_top{top_n}"
+        strategies[key] = {
+            "label":          f"Nasdaq Sammansatt Top-{top_n}",
+            "nav":            nav,
+            "stats":          _calc_stats(nav),
+            "alloc_log":      al,
+            "allocation":     _alloc_matrix(al),
+            "current_signal": {"date": al[-1]["date"],
+                               "holdings": [{"ticker": t, "weight": w}
+                                            for t, w in al[-1]["holdings"].items()]},
+            "params":         {"top_n": top_n, "cost": COST},
+            "benchmark":      {"label": "QQQ", "series": bench_s},
+        }
+        all_scores = last_sc
+
+    all_tickers = {t for s in strategies.values()
+                   for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
+    existing = {}
+    nasdaq_path = data_root / "results" / "nasdaq_sammansatt_results.json"
+    if nasdaq_path.exists():
+        existing = json.loads(nasdaq_path.read_text()).get("company_info", {})
+    company_info = _fetch_company_info(sorted(all_tickers), existing)
+
+    return {"generated_at": pd.Timestamp.now().isoformat(),
+            "strategies":   strategies,
+            "benchmark":    {"label": "QQQ", "series": bench_s},
+            "company_info": company_info,
+            "all_scores":   all_scores}
 
 
 def run_global(data_root: Path, backend_dir: Path) -> dict:
@@ -363,15 +424,17 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
     fx_sek     = _load_fx(stock_dir / "fx", "SEKUSD=X")
     fx_eur     = _load_fx(stock_dir / "fx", "EURUSD=X")
 
-    omxs_usd   = _apply_fx(_load_prices(stock_dir / "omxs"), fx_sek)
-    stoxx_usd  = _apply_fx(_load_prices(stock_dir / "stoxx"), fx_eur)
-    sp500_raw  = _load_prices(stock_dir / "sp500")
+    omxs_usd    = _apply_fx(_load_prices(stock_dir / "omxs"),   fx_sek)
+    stoxx_usd   = _apply_fx(_load_prices(stock_dir / "stoxx"),  fx_eur)
+    sp500_raw   = _load_prices(stock_dir / "sp500")
+    nasdaq_raw  = _load_prices(stock_dir / "nasdaq")
 
     all_prices: dict = {}
     tag:        dict = {}
-    for tk, df in omxs_usd.items():  all_prices[f"OMXS:{tk}"]  = df; tag[f"OMXS:{tk}"]  = "OMXS"
-    for tk, df in stoxx_usd.items(): all_prices[f"STOXX:{tk}"] = df; tag[f"STOXX:{tk}"] = "STOXX"
-    for tk, df in sp500_raw.items(): all_prices[f"SP500:{tk}"] = df; tag[f"SP500:{tk}"] = "SP500"
+    for tk, df in omxs_usd.items():   all_prices[f"OMXS:{tk}"]   = df; tag[f"OMXS:{tk}"]   = "OMXS"
+    for tk, df in stoxx_usd.items():  all_prices[f"STOXX:{tk}"]  = df; tag[f"STOXX:{tk}"]  = "STOXX"
+    for tk, df in sp500_raw.items():  all_prices[f"SP500:{tk}"]  = df; tag[f"SP500:{tk}"]  = "SP500"
+    for tk, df in nasdaq_raw.items(): all_prices[f"NASDAQ:{tk}"] = df; tag[f"NASDAQ:{tk}"] = "NASDAQ"
 
     pit = pd.read_csv(backend_dir.parent / "data" / "sp500_ticker_start_end.csv",
                       parse_dates=["start_date", "end_date"])
@@ -379,7 +442,7 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
 
     def valid_global(ticker: str, date_str: str) -> bool:
         if not ticker.startswith("SP500:"):
-            return True
+            return True  # OMXS, STOXX, NASDAQ — always valid
         raw = ticker.replace("SP500:", "")
         d   = pd.Timestamp(date_str)
         return bool(((pit.start_date <= d) & (pit.end_date > d) &
@@ -388,18 +451,22 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
     spy_raw  = _load_fx(stock_dir / "gates", "SPY")
     bench_s  = _bench_nav(spy_raw)
 
-    configs = [(7, {"OMXS": 3, "STOXX": 3, "SP500": 3}),
-               (10, {"OMXS": 4, "STOXX": 4, "SP500": 4}),
-               (15, {"OMXS": 5, "STOXX": 5, "SP500": 5})]
+    # 4-universe configs: (top_n, {uni: max_picks})
+    configs = [
+        (9,  {"OMXS": 3, "STOXX": 3, "SP500": 2, "NASDAQ": 2}),
+        (12, {"OMXS": 3, "STOXX": 3, "SP500": 3, "NASDAQ": 3}),
+        (15, {"OMXS": 4, "STOXX": 4, "SP500": 4, "NASDAQ": 4}),
+    ]
 
     strategies: dict = {}
+    all_scores: dict = {}
     for top_n, max_u in configs:
-        log.info("Global Top-%d (max %d/univ) …", top_n, max_u["SP500"])
-        nav, al = _run_backtest(all_prices, valid_fn=valid_global,
-                                top_n=top_n, max_per_universe=max_u, tag=tag)
+        log.info("Global Top-%d (4 universes) …", top_n)
+        nav, al, last_sc = _run_backtest(all_prices, valid_fn=valid_global,
+                                         top_n=top_n, max_per_universe=max_u, tag=tag)
         key = f"global_top{top_n}"
         strategies[key] = {
-            "label":          f"Global Top-{top_n} (max {max_u['SP500']}/univ)",
+            "label":          f"Global Top-{top_n} (4 univ, max {max_u['SP500']}-{max_u['OMXS']}/univ)",
             "nav":            nav,
             "stats":          _calc_stats(nav),
             "alloc_log":      al,
@@ -412,8 +479,9 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
             "params":  {"top_n": top_n, "max_per_universe": max_u, "cost": COST},
             "benchmark": {"label": "SPY", "series": bench_s},
         }
+        all_scores = last_sc
 
-    # company_info keyed by raw ticker (without "OMXS:"/"STOXX:"/"SP500:" prefix)
+    # company_info keyed by raw ticker (without prefix)
     raw_tickers = {t.split(":", 1)[1] if ":" in t else t
                    for s in strategies.values()
                    for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
@@ -427,7 +495,8 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
             "strategies":   strategies,
             "benchmark":    {"label": "SPY", "series": bench_s},
             "ticker_tag":   tag,
-            "company_info": company_info}
+            "company_info": company_info,
+            "all_scores":   all_scores}
 
 
 # ── Main entry point ──────────────────────────────────────────────────
@@ -441,6 +510,7 @@ def run_all(data_root: Path, backend_dir: Path) -> dict[str, str]:
         ("omxs",   lambda: run_omxs(data_root)),
         ("stoxx",  lambda: run_stoxx(data_root)),
         ("sp500",  lambda: run_sp500(data_root, backend_dir)),
+        ("nasdaq", lambda: run_nasdaq(data_root)),
         ("global", lambda: run_global(data_root, backend_dir)),
     ]:
         t0 = time.time()
@@ -473,8 +543,9 @@ def extend_nav_daily(data_root: Path) -> dict[str, int]:
     fx_eur = _load_fx(stock_dir / "fx", "EURUSD=X")
 
     def _fx_for(sub: str) -> pd.Series:
-        if sub == "omxs":  return fx_sek
-        if sub == "stoxx": return fx_eur
+        if sub == "omxs":   return fx_sek
+        if sub == "stoxx":  return fx_eur
+        # nasdaq, sp500, global sub-universe files are already in USD
         return pd.Series(dtype=float)
 
     def _sub_and_raw(ticker: str, default_uni: str) -> tuple[str, str]:
@@ -485,7 +556,7 @@ def extend_nav_daily(data_root: Path) -> dict[str, int]:
 
     counts: dict = {}
 
-    for uni in ("omxs", "stoxx", "sp500", "global"):
+    for uni in ("omxs", "stoxx", "sp500", "nasdaq", "global"):
         path = data_root / "results" / f"{uni}_sammansatt_results.json"
         if not path.exists():
             counts[uni] = 0
@@ -733,22 +804,24 @@ def run_monthly_rebalance(data_root: Path, backend_dir: Path) -> dict[str, str]:
 
     # Load recent prices once per sub-universe
     log.info("Loading recent prices …")
-    omxs_px  = _load_recent_for_scoring(stock_dir / "omxs",  fx_sek, rebal_date)
-    stoxx_px = _load_recent_for_scoring(stock_dir / "stoxx", fx_eur, rebal_date)
-    sp500_px = {tk: s for tk, s in
-                _load_recent_for_scoring(stock_dir / "sp500", pd.Series(dtype=float), rebal_date).items()
-                if pit_ok(tk)}
+    omxs_px   = _load_recent_for_scoring(stock_dir / "omxs",   fx_sek,              rebal_date)
+    stoxx_px  = _load_recent_for_scoring(stock_dir / "stoxx",  fx_eur,              rebal_date)
+    sp500_px  = {tk: s for tk, s in
+                 _load_recent_for_scoring(stock_dir / "sp500", pd.Series(dtype=float), rebal_date).items()
+                 if pit_ok(tk)}
+    nasdaq_px = _load_recent_for_scoring(stock_dir / "nasdaq", pd.Series(dtype=float), rebal_date)
 
-    # Build tagged global pool
+    # Build tagged global pool (4 universes)
     global_px:  dict = {}
     global_tag: dict = {}
-    for tk, s in omxs_px.items():  global_px[f"OMXS:{tk}"]  = s; global_tag[f"OMXS:{tk}"]  = "OMXS"
-    for tk, s in stoxx_px.items(): global_px[f"STOXX:{tk}"] = s; global_tag[f"STOXX:{tk}"] = "STOXX"
-    for tk, s in sp500_px.items(): global_px[f"SP500:{tk}"] = s; global_tag[f"SP500:{tk}"] = "SP500"
+    for tk, s in omxs_px.items():   global_px[f"OMXS:{tk}"]   = s; global_tag[f"OMXS:{tk}"]   = "OMXS"
+    for tk, s in stoxx_px.items():  global_px[f"STOXX:{tk}"]  = s; global_tag[f"STOXX:{tk}"]  = "STOXX"
+    for tk, s in sp500_px.items():  global_px[f"SP500:{tk}"]  = s; global_tag[f"SP500:{tk}"]  = "SP500"
+    for tk, s in nasdaq_px.items(): global_px[f"NASDAQ:{tk}"] = s; global_tag[f"NASDAQ:{tk}"] = "NASDAQ"
 
     status: dict = {}
 
-    for uni in ("omxs", "stoxx", "sp500", "global"):
+    for uni in ("omxs", "stoxx", "sp500", "nasdaq", "global"):
         path = results_dir / f"{uni}_sammansatt_results.json"
         if not path.exists():
             status[uni] = "no_results"; continue
@@ -765,17 +838,22 @@ def run_monthly_rebalance(data_root: Path, backend_dir: Path) -> dict[str, str]:
 
             # Compute scores for this universe
             if uni == "omxs":
-                pool  = omxs_px;  tag_map = None; def_sub = "omxs"
+                pool  = omxs_px;   tag_map = None;       def_sub = "omxs"
             elif uni == "stoxx":
-                pool  = stoxx_px; tag_map = None; def_sub = "stoxx"
+                pool  = stoxx_px;  tag_map = None;       def_sub = "stoxx"
             elif uni == "sp500":
-                pool  = sp500_px; tag_map = None; def_sub = "sp500"
+                pool  = sp500_px;  tag_map = None;       def_sub = "sp500"
+            elif uni == "nasdaq":
+                pool  = nasdaq_px; tag_map = None;       def_sub = "nasdaq"
             else:
                 pool  = global_px; tag_map = global_tag; def_sub = None
 
-            scores = {tk: _composite_score(s.values, len(s) - 1)
+            all_sc = {tk: _composite_score(s.values, len(s) - 1)
                       for tk, s in pool.items()}
-            scores = {tk: sc for tk, sc in scores.items()
+            # Save all finite scores (not just positive) for the screener
+            blob["all_scores"] = {tk: float(sc) for tk, sc in all_sc.items()
+                                  if np.isfinite(sc)}
+            scores = {tk: sc for tk, sc in all_sc.items()
                       if np.isfinite(sc) and sc > 0}
 
             for strat_key, strat in strats.items():
@@ -854,7 +932,7 @@ def results_are_stale(data_root: Path, max_age_days: int = 35) -> bool:
     """True if any sammansatt results JSON is older than max_age_days or missing."""
     import time as _time
     now = _time.time()
-    for name in ("omxs", "stoxx", "sp500", "global"):
+    for name in ("omxs", "stoxx", "sp500", "nasdaq", "global"):
         path = data_root / "results" / f"{name}_sammansatt_results.json"
         if not path.exists():
             return True

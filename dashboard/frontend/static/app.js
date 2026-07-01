@@ -305,9 +305,16 @@ const SERIES_CFG = {
   stoxx_sammansatt_top5:   { label: "STOXX Sammansatt Top-5",    color: "#c026d3", width: 2.5 },
   stoxx_sammansatt_top7:   { label: "STOXX Sammansatt Top-7",    color: "#d946ef", width: 2.0 },
   stoxx_sammansatt_top10:  { label: "STOXX Sammansatt Top-10",   color: "#e879f9", width: 1.5 },
+  nasdaq_sammansatt_top5:  { label: "Nasdaq Sammansatt Top-5",    color: "#38bdf8", width: 2.5 },
+  nasdaq_sammansatt_top7:  { label: "Nasdaq Sammansatt Top-7",    color: "#7dd3fc", width: 2.0 },
+  nasdaq_sammansatt_top10: { label: "Nasdaq Sammansatt Top-10",   color: "#bae6fd", width: 1.5 },
+  // Global — 4-universe configs (top9/12/15)
+  global_top9:             { label: "Global Top-9 (4 univ)",      color: "#facc15", width: 2.5 },
+  global_top12:            { label: "Global Top-12 (4 univ)",     color: "#fbbf24", width: 2.0 },
+  global_top15:            { label: "Global Top-15 (4 univ)",     color: "#f59e0b", width: 1.5 },
+  // Keep old keys for backwards compat (results may still use them)
   global_top7:             { label: "Global Top-7 (max 3/univ)",  color: "#facc15", width: 2.5 },
   global_top10:            { label: "Global Top-10 (max 4/univ)", color: "#fbbf24", width: 2.0 },
-  global_top15:            { label: "Global Top-15 (max 5/univ)", color: "#f59e0b", width: 1.5 },
   no_gate_top3:       { label: "OMXS No gate — Top 3",   color: "#8b5cf6", width: 2.5 },
   no_gate_top5:       { label: "OMXS No gate — Top 5",   color: "#7c3aed", width: 2.0 },
   spy_gate_top3:      { label: "OMXS SPY gate — Top 3",  color: "#10b981", width: 2.5 },
@@ -358,6 +365,7 @@ let tickerColorMap = {};
 let ppmColorMap    = {};
 let stockColorMap  = {};
 let stoxxChart     = null;
+let nasdaqChart    = null;
 let globalChart    = null;
 
 // ── Init ───────────────────────────────────────────────────────────
@@ -366,10 +374,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   stocksChart = echarts.init(document.getElementById("stocks-chart"), null, { renderer: "canvas" });
   omxsChart   = echarts.init(document.getElementById("omxs-chart"),   null, { renderer: "canvas" });
   stoxxChart  = echarts.init(document.getElementById("stoxx-chart"),  null, { renderer: "canvas" });
+  nasdaqChart = echarts.init(document.getElementById("nasdaq-chart"), null, { renderer: "canvas" });
   globalChart = echarts.init(document.getElementById("global-chart"), null, { renderer: "canvas" });
   window.addEventListener("resize", () => {
     mainChart?.resize(); stocksChart?.resize(); omxsChart?.resize();
-    stoxxChart?.resize(); globalChart?.resize();
+    stoxxChart?.resize(); nasdaqChart?.resize(); globalChart?.resize();
   });
   document.getElementById("start-date").addEventListener("change", () => { if (DATA) renderMainChart(); });
   await loadData();
@@ -377,20 +386,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // ── Tab switching ──────────────────────────────────────────────────
 function switchTab(tab) {
-  const views = ["dashboard", "settings", "funds", "screen", "stocks", "omxs", "stoxx", "global", "logs", "docs"];
+  const views = ["dashboard", "settings", "funds", "screen", "stocks", "omxs", "stoxx", "nasdaq", "global", "universe", "logs", "docs"];
   views.forEach(v => document.getElementById("view-" + v)?.classList.toggle("hidden", tab !== v));
   views.forEach(v => {
     const el = document.getElementById("tab-" + v);
     if (el) el.className = tab === v ? "tab-active pb-1 transition-colors" : "tab-inactive pb-1 transition-colors";
   });
-  if (tab === "funds")    renderFundsTable();
-  if (tab === "screen")   renderScreening();
-  if (tab === "logs")     renderLogs();
-  if (tab === "docs")     renderDocs();
-  if (tab === "stocks")   renderStocksPage();
-  if (tab === "omxs")     renderOMXSPage();
-  if (tab === "stoxx")    renderSTOXXPage();
-  if (tab === "global")   renderGlobalPage();
+  if (tab === "funds")     renderFundsTable();
+  if (tab === "screen")    renderScreening();
+  if (tab === "logs")      renderLogs();
+  if (tab === "docs")      renderDocs();
+  if (tab === "stocks")    renderStocksPage();
+  if (tab === "omxs")      renderOMXSPage();
+  if (tab === "stoxx")     renderSTOXXPage();
+  if (tab === "nasdaq")    renderNasdaqPage();
+  if (tab === "global")    renderGlobalPage();
+  if (tab === "universe")  renderUniversePage();
   if (tab === "settings" && !CONFIG) loadConfig();
 }
 
@@ -2909,6 +2920,421 @@ function _renderSTOXXStats(available) {
   el.innerHTML = `<div class="space-y-6">${cards}</div>`;
 }
 
+// ── Nasdaq page ────────────────────────────────────────────────────
+const NASDAQ_SAMMANSATT_STRATS = [
+  { key: "nasdaq_sammansatt_top5",  label: "Nasdaq Top-5",  color: "#38bdf8", group: "sammansatt" },
+  { key: "nasdaq_sammansatt_top7",  label: "Nasdaq Top-7",  color: "#7dd3fc", group: "sammansatt" },
+  { key: "nasdaq_sammansatt_top10", label: "Nasdaq Top-10", color: "#bae6fd", group: "sammansatt" },
+];
+let nasdaqActiveKeys = new Set(["nasdaq_sammansatt_top5", "nasdaq_sammansatt_top7"]);
+
+function renderNasdaqPage() {
+  if (!DATA) return;
+  const strategies = DATA.strategies || {};
+  const available  = NASDAQ_SAMMANSATT_STRATS.filter(s => strategies[s.key]);
+
+  if (!available.length) {
+    document.getElementById("nasdaq-stats").innerHTML =
+      `<p class="text-xs text-muted italic px-1">Ingen Nasdaq-data tillgänglig. Kör run_all() för att generera resultat.</p>`;
+    return;
+  }
+  _buildNasdaqToggles(available);
+  _renderNasdaqChart(available);
+  _renderNasdaqHoldings(available);
+  _renderNasdaqStats(available);
+}
+
+function _buildNasdaqToggles(available) {
+  const el = document.getElementById("nasdaq-toggles");
+  if (!el) return;
+  el.innerHTML = "";
+  available.forEach(({ key, label, color }) => {
+    const on  = nasdaqActiveKeys.has(key);
+    const btn = document.createElement("button");
+    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+    applyToggleStyle(btn, on, color);
+    const dot = document.createElement("span");
+    dot.className = "w-2 h-2 rounded-full flex-shrink-0";
+    dot.style.background = color;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(label));
+    btn.addEventListener("click", () => {
+      if (nasdaqActiveKeys.has(key)) nasdaqActiveKeys.delete(key);
+      else nasdaqActiveKeys.add(key);
+      applyToggleStyle(btn, nasdaqActiveKeys.has(key), color);
+      _renderNasdaqChart(available);
+      _renderNasdaqStats(available);
+    });
+    el.appendChild(btn);
+  });
+}
+
+function _renderNasdaqChart(available) {
+  if (!nasdaqChart || !DATA) return;
+  nasdaqChart.resize();
+  const strategies = DATA.strategies || {};
+  const startDate  = "2006-01-01";
+
+  function normalize(nav) {
+    if (!nav?.length) return [];
+    const idx = nav.findIndex(p => p.date >= startDate);
+    if (idx === -1) return [];
+    const base = nav[idx].value;
+    return base ? nav.slice(idx).map(p => [p.date, +(p.value / base * 100).toFixed(4)]) : [];
+  }
+
+  const series = NASDAQ_SAMMANSATT_STRATS
+    .filter(s => nasdaqActiveKeys.has(s.key) && strategies[s.key])
+    .map(({ key, label, color }) => ({
+      name: label, type: "line", data: normalize(strategies[key].nav),
+      smooth: false, symbol: "none",
+      lineStyle: { color, width: SERIES_CFG[key]?.width || 2 }, itemStyle: { color },
+    }));
+
+  // Benchmark: QQQ
+  const benchSeries = available[0] ? strategies[available[0].key]?.benchmark?.series : null;
+  if (benchSeries) {
+    const c = "#94a3b8";
+    series.push({ name: "QQQ", type: "line",
+                  data: normalize(benchSeries), smooth: false, symbol: "none",
+                  lineStyle: { color: c, width: 1.4, type: "dashed" }, itemStyle: { color: c } });
+  }
+
+  nasdaqChart.setOption({
+    backgroundColor: "transparent", animation: false,
+    grid:  { top: 24, left: 60, right: 20, bottom: 36 },
+    xAxis: { type: "time", min: startDate,
+             axisLabel: { color: "#8591b8", fontSize: 10 },
+             axisLine:  { lineStyle: { color: "#252a3d" } }, splitLine: { show: false } },
+    yAxis: { type: "value",
+             axisLabel: { color: "#8591b8", fontSize: 10, formatter: v => v.toFixed(0) },
+             axisLine: { show: false },
+             splitLine: { lineStyle: { color: "#252a3d", type: "dashed" } }, axisTick: { show: false } },
+    tooltip: {
+      trigger: "axis", backgroundColor: "#1a1e2e", borderColor: "#252a3d",
+      textStyle: { color: "#c9d1e0", fontSize: 11 },
+      formatter(params) {
+        if (!params?.length) return "";
+        const d = new Date(params[0].axisValue).toISOString().slice(0, 10);
+        const rows = params.map(p =>
+          `<div style="display:flex;justify-content:space-between;gap:20px">
+            <span style="color:${p.color}">${p.seriesName}</span>
+            <span style="font-variant-numeric:tabular-nums">${(+p.value[1]).toFixed(1)}</span>
+           </div>`).join("");
+        return `<div style="font-size:11px"><div style="color:#8591b8;margin-bottom:4px">${d}</div>${rows}</div>`;
+      },
+    },
+    legend: { show: false }, series,
+  }, true);
+}
+
+function _renderNasdaqHoldings(available) {
+  const el = document.getElementById("nasdaq-signal-row");
+  if (!el) return;
+  const strategies  = DATA?.strategies || {};
+  const companyInfo = DATA?.nasdaq_company_info || {};
+
+  el.innerHTML = available.map(({ key, label, color }) => {
+    const cs = strategies[key]?.current_signal;
+    if (!cs) return "";
+    const cashHolding = cs.holdings?.find(h => h.ticker === "CASH");
+    if (cashHolding) {
+      return `<div class="bg-panel border border-border rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+            <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+          </div>
+          <span class="text-xs text-muted">${cs.date}</span>
+        </div>
+        <p class="text-xs text-muted italic">Kontanter — absolut momentum negativt</p>
+      </div>`;
+    }
+    const chips = (cs.holdings || []).filter(h => h.ticker !== "CASH").map(h => {
+      const ticker = h.ticker.replace(/\.[A-Z]+$/, "");
+      const name   = companyInfo[h.ticker]?.name || null;
+      const pct    = Math.round(h.weight * 100);
+      return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+        <div class="min-w-0">
+          <span class="text-xs font-mono font-medium text-slate-300">${ticker}</span>
+          ${name ? `<span class="text-xs text-muted ml-2">${name}</span>` : ""}
+        </div>
+        <span class="text-xs text-muted ml-2 shrink-0">${pct}%</span>
+      </div>`;
+    }).join("");
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+        </div>
+        <span class="text-xs text-muted">${cs.date}</span>
+      </div>
+      ${chips || '<p class="text-xs text-muted italic">Inga innehav</p>'}
+    </div>`;
+  }).join("");
+}
+
+function _renderNasdaqStats(available) {
+  const el = document.getElementById("nasdaq-stats");
+  if (!el) return;
+  const strategies  = DATA?.strategies || {};
+  const companyInfo = DATA?.nasdaq_company_info || {};
+
+  function pct(v, d = 1) {
+    return v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
+  }
+  function colorVal(v) {
+    return v == null ? "color:#8591b8" : v >= 0 ? "color:#10b981" : "color:#f43f5e";
+  }
+
+  const activeStrats = available.filter(s => nasdaqActiveKeys.has(s.key));
+  if (!activeStrats.length) { el.innerHTML = ""; return; }
+
+  const cards = activeStrats.map(({ key, label, color }) => {
+    const strat = strategies[key];
+    const st    = strat?.stats;
+    if (!st) return "";
+    const params   = strat.params || {};
+    const cs       = strat.current_signal || {};
+    const allocLog = strat.alloc_log || [];
+
+    const summaryHtml = `
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4 mt-3">
+        <div><p class="text-xs text-muted mb-0.5">CAGR</p>
+          <p class="text-lg font-semibold" style="${colorVal(st.cagr)}">${pct(st.cagr)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Sharpe</p>
+          <p class="text-lg font-semibold text-slate-300">${st.sharpe?.toFixed(2) ?? "—"}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Max DD</p>
+          <p class="text-lg font-semibold" style="color:#f43f5e">${pct(st.max_dd)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Volatilitet</p>
+          <p class="text-lg font-semibold text-slate-300">${pct(st.ann_vol)}</p></div>
+        <div><p class="text-xs text-muted mb-0.5">Total</p>
+          <p class="text-lg font-semibold" style="${colorVal(st.total)}">${pct(st.total)}</p></div>
+      </div>`;
+
+    const currentRows = (cs.holdings || [])
+      .filter(h => h.ticker !== "CASH")
+      .map(h => {
+        const info = companyInfo[h.ticker];
+        const name = info?.name ? `<span class="text-xs text-muted ml-2">${info.name}</span>` : "";
+        const w    = Math.round((h.weight || 0) * 100);
+        return `<div class="flex items-center justify-between py-2 border-b border-border last:border-0 gap-3">
+          <div class="min-w-0">
+            <span class="text-xs font-mono font-medium text-slate-300">${h.ticker}</span>
+            ${name}
+          </div>
+          <span class="text-xs text-muted flex-shrink-0">${w}%</span>
+        </div>`;
+      }).join("") || '<p class="text-xs text-muted italic py-2">Inga innehav (kontanter)</p>';
+
+    const histRows = [...allocLog].reverse().slice(0, 36).map(e => {
+      if (e.holdings["CASH"]) {
+        return `<tr class="border-b border-border">
+          <td class="py-1.5 pr-3 text-xs text-slate-400 whitespace-nowrap">${e.date}</td>
+          <td colspan="${params.top_n || 5}" class="py-1.5 text-xs text-muted italic">Kontanter</td>
+        </tr>`;
+      }
+      const cells = Object.keys(e.holdings).map(t => {
+        const info = companyInfo[t];
+        const shortName = info?.name ? info.name.replace(/ (Inc\.|Corp\.|Ltd\.?|Group|Holdings?)/g, "").trim().slice(0, 20) : t;
+        return `<td class="py-1.5 px-1">
+          <div class="text-xs text-slate-300 font-mono leading-tight">${t}</div>
+          <div class="text-xs text-muted leading-tight">${shortName !== t ? shortName : ""}</div>
+        </td>`;
+      });
+      return `<tr class="border-b border-border hover:bg-white/[0.02]">
+        <td class="py-1.5 pr-3 text-xs text-slate-400 whitespace-nowrap">${e.date}</td>
+        ${cells.join("")}
+      </tr>`;
+    }).join("");
+
+    const topN   = params.top_n || 5;
+    const colHdr = Array.from({ length: topN }, (_, i) =>
+      `<th class="text-xs text-muted font-normal px-1 pb-2">#${i + 1}</th>`).join("");
+    const histHtml = allocLog.length ? `
+      <div>
+        <p class="text-xs font-semibold text-slate-400 mb-2">Historik — månadsinnehav (senaste 36)</p>
+        <div class="overflow-auto max-h-[480px] rounded border border-border">
+          <table class="w-full min-w-max border-collapse">
+            <thead class="sticky top-0 bg-[#0f1117]">
+              <tr><th class="text-xs text-muted font-normal pr-3 pb-2 text-left">Datum</th>${colHdr}</tr>
+            </thead>
+            <tbody>${histRows}</tbody>
+          </table>
+        </div>
+      </div>` : "";
+
+    return `<div class="bg-panel border border-border rounded-lg p-4 space-y-5">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+        <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+      </div>
+      ${summaryHtml}
+      <div>
+        <p class="text-xs font-semibold text-slate-400 mb-2">Aktuell portfölj · ${cs.date || "—"}</p>
+        ${currentRows}
+      </div>
+      ${histHtml ? `<div class="pt-2">${histHtml}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  el.innerHTML = `<div class="space-y-6">${cards}</div>`;
+}
+
+// ── Universe (all-instrument screener) page ────────────────────────
+// Kept as var so inline onclick can access them from global scope
+var _universeSort = { col: "score", dir: -1 };
+var _universeFilters = new Set(["OMXS", "STOXX", "SP500", "Nasdaq"]);
+
+function renderUniversePage() {
+  if (!DATA) return;
+
+  // Collect all_scores from all universes
+  const universeData = [];
+  const universes = [
+    { key: "omxs",   label: "OMXS",   scores: DATA.omxs_all_scores,   info: DATA.omxs_company_info   || {} },
+    { key: "stoxx",  label: "STOXX",  scores: DATA.stoxx_all_scores,  info: DATA.stoxx_company_info  || {} },
+    { key: "sp500",  label: "SP500",  scores: DATA.sp500_all_scores,  info: DATA.sp500_company_info  || {} },
+    { key: "nasdaq", label: "Nasdaq", scores: DATA.nasdaq_all_scores, info: DATA.nasdaq_company_info || {} },
+  ];
+
+  for (const { label, scores, info } of universes) {
+    if (!scores || !Object.keys(scores).length) continue;
+    for (const [ticker, score] of Object.entries(scores)) {
+      universeData.push({
+        ticker,
+        name:     info[ticker]?.name || "",
+        universe: label,
+        score:    typeof score === "number" ? score : null,
+      });
+    }
+  }
+
+  if (!universeData.length) {
+    document.getElementById("universe-table-wrap").innerHTML =
+      `<p class="text-xs text-muted italic">Ingen universe-data tillgänglig. Kör run_all() för att generera resultat.</p>`;
+    _buildUniverseFilters(universes.map(u => u.label), universeData);
+    return;
+  }
+
+  _buildUniverseFilters(universes.map(u => u.label), universeData);
+  _renderUniverseTable(universeData);
+
+  // Wire up search
+  const searchEl = document.getElementById("universe-search");
+  if (searchEl) {
+    searchEl.oninput = () => _renderUniverseTable(universeData);
+  }
+}
+
+function _buildUniverseFilters(labels, universeData) {
+  const el = document.getElementById("universe-filters");
+  if (!el) return;
+  el.innerHTML = "";
+  const uColors = { OMXS: "#f97316", STOXX: "#c026d3", SP500: "#34d399", Nasdaq: "#38bdf8" };
+  labels.forEach(label => {
+    const on  = _universeFilters.has(label);
+    const col = uColors[label] || "#8591b8";
+    const btn = document.createElement("button");
+    btn.className = "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all";
+    _applyUniFilterStyle(btn, on, col);
+    const dot = document.createElement("span");
+    dot.className = "w-2 h-2 rounded-full flex-shrink-0";
+    dot.style.background = col;
+    btn.appendChild(dot);
+    btn.appendChild(document.createTextNode(label));
+    btn.addEventListener("click", () => {
+      if (_universeFilters.has(label)) _universeFilters.delete(label);
+      else _universeFilters.add(label);
+      _applyUniFilterStyle(btn, _universeFilters.has(label), col);
+      _renderUniverseTable(universeData);
+    });
+    el.appendChild(btn);
+  });
+}
+
+function _applyUniFilterStyle(btn, on, color) {
+  if (on) {
+    btn.style.borderColor = color;
+    btn.style.background  = color + "22";
+    btn.style.color       = color;
+  } else {
+    btn.style.borderColor = "#252a3d";
+    btn.style.background  = "transparent";
+    btn.style.color       = "#8591b8";
+  }
+}
+
+function _renderUniverseTable(universeData) {
+  const el = document.getElementById("universe-table-wrap");
+  if (!el) return;
+
+  const search = (document.getElementById("universe-search")?.value || "").toLowerCase().trim();
+  const { col, dir } = _universeSort;
+  const uColors = { OMXS: "#f97316", STOXX: "#c026d3", SP500: "#34d399", Nasdaq: "#38bdf8" };
+
+  let rows = universeData
+    .filter(r => _universeFilters.has(r.universe))
+    .filter(r => !search ||
+      r.ticker.toLowerCase().includes(search) ||
+      r.name.toLowerCase().includes(search))
+    .sort((a, b) => {
+      let va = a[col], vb = b[col];
+      if (col === "score") {
+        va = va ?? -Infinity;
+        vb = vb ?? -Infinity;
+      } else {
+        va = (va || "").toLowerCase();
+        vb = (vb || "").toLowerCase();
+      }
+      if (va < vb) return -dir;
+      if (va > vb) return  dir;
+      return 0;
+    });
+
+  function sortBtn(c, label) {
+    const active = _universeSort.col === c;
+    const arrow  = active ? (_universeSort.dir === 1 ? " ▲" : " ▼") : "";
+    return `<th class="text-left text-xs text-muted font-normal px-3 py-2 cursor-pointer hover:text-slate-300 select-none whitespace-nowrap"
+                onclick="_universeSort={col:'${c}',dir:${active ? -_universeSort.dir : (c === 'score' ? -1 : 1)}};_renderUniverseTable(window._universeDataRef)"
+            >${label}${arrow}</th>`;
+  }
+
+  // Store ref for sort callbacks
+  window._universeDataRef = universeData;
+
+  const tbody = rows.map(r => {
+    const uCol    = uColors[r.universe] || "#8591b8";
+    const sc      = r.score;
+    const scStr   = sc == null ? "—" : (sc >= 0 ? "+" : "") + (sc * 100).toFixed(1) + "%";
+    const scColor = sc == null ? "#8591b8" : sc > 0 ? "#10b981" : "#f43f5e";
+    const name    = r.name ? `<span class="text-muted">${r.name}</span>` : "";
+    return `<tr class="border-b border-border hover:bg-white/[0.02]">
+      <td class="px-3 py-2">
+        <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:${uCol}22;color:${uCol}">${r.universe}</span>
+      </td>
+      <td class="px-3 py-2 text-xs font-mono font-medium text-slate-300 whitespace-nowrap">${r.ticker}</td>
+      <td class="px-3 py-2 text-xs">${name}</td>
+      <td class="px-3 py-2 text-xs font-semibold text-right whitespace-nowrap" style="color:${scColor}">${scStr}</td>
+    </tr>`;
+  }).join("");
+
+  el.innerHTML = `
+    <p class="text-xs text-muted mb-2">${rows.length} instrument visas</p>
+    <table class="w-full border-collapse min-w-[500px]">
+      <thead class="bg-[#0f1117] sticky top-0">
+        <tr>
+          ${sortBtn("universe", "Universum")}
+          ${sortBtn("ticker",   "Ticker")}
+          ${sortBtn("name",     "Namn")}
+          ${sortBtn("score",    "Score")}
+        </tr>
+      </thead>
+      <tbody>${tbody}</tbody>
+    </table>`;
+}
+
 // ── Documentation page ─────────────────────────────────────────────
 function renderDocs() {
   const el = document.getElementById("view-docs");
@@ -3614,12 +4040,16 @@ Urval Top-7 med cap: max 3 per universum
 }
 
 // ── Global page ────────────────────────────────────────────────────
+// New 4-universe configs (top9/12/15). Old keys (top7/10) kept for backwards compat.
 const GLOBAL_STRATS = [
-  { key: "global_top7",  label: "Global Top-7 (max 3/univ)",  color: "#facc15" },
-  { key: "global_top10", label: "Global Top-10 (max 4/univ)", color: "#fbbf24" },
-  { key: "global_top15", label: "Global Top-15 (max 5/univ)", color: "#f59e0b" },
+  { key: "global_top9",  label: "Global Top-9 (4 univ)",  color: "#facc15" },
+  { key: "global_top12", label: "Global Top-12 (4 univ)", color: "#fbbf24" },
+  { key: "global_top15", label: "Global Top-15 (4 univ)", color: "#f59e0b" },
+  // Old 3-universe keys still shown if new ones absent
+  { key: "global_top7",  label: "Global Top-7 (3 univ)",  color: "#facc15" },
+  { key: "global_top10", label: "Global Top-10 (3 univ)", color: "#fbbf24" },
 ];
-let globalActiveKeys = new Set(["global_top7", "global_top10"]);
+let globalActiveKeys = new Set(["global_top9", "global_top12", "global_top7", "global_top10"]);
 
 function renderGlobalPage() {
   if (!DATA) return;
@@ -3679,8 +4109,9 @@ function _renderGlobalChart(available) {
       lineStyle: { color, width: SERIES_CFG[key]?.width || 2 }, itemStyle: { color },
     }));
 
-  // Benchmark
-  const benchSeries = strategies["global_top7"]?.benchmark?.series;
+  // Benchmark — prefer new key, fall back to old
+  const benchKey0 = ["global_top9", "global_top12", "global_top7", "global_top10"].find(k => strategies[k]);
+  const benchSeries = benchKey0 ? strategies[benchKey0]?.benchmark?.series : null;
   if (benchSeries) {
     series.push({ name: "Equal-weight SPY+EXSA+OMX", type: "line",
                   data: normalize(benchSeries), smooth: false, symbol: "none",
@@ -3715,7 +4146,7 @@ function _renderGlobalChart(available) {
 }
 
 // Universe label colors
-const UNIVERSE_COLORS = { OMXS: "#f97316", STOXX: "#c026d3", SP500: "#34d399" };
+const UNIVERSE_COLORS = { OMXS: "#f97316", STOXX: "#c026d3", SP500: "#34d399", NASDAQ: "#38bdf8" };
 
 function _renderGlobalSignal(available) {
   const el = document.getElementById("global-signal-row");
@@ -3735,10 +4166,11 @@ function _renderGlobalSignal(available) {
       <p class="text-xs text-muted italic">Kontanter — absolut momentum negativt</p>
     </div>`;
 
-    const globalInfo = DATA?.global_company_info || {};
-    const omxsInfo   = DATA?.omxs_company_info  || {};
+    const globalInfo = DATA?.global_company_info  || {};
+    const omxsInfo   = DATA?.omxs_company_info   || {};
     const stoxxInfo  = DATA?.stoxx_company_info  || {};
     const sp500Info  = DATA?.sp500_company_info  || {};
+    const nasdaqInfo = DATA?.nasdaq_company_info || {};
     const chips = (cs.holdings || []).filter(h => h.ticker !== "CASH").map(h => {
       const parts    = h.ticker.split(":");
       const universe = parts.length > 1 ? parts[0] : h.universe || "";
@@ -3746,8 +4178,9 @@ function _renderGlobalSignal(available) {
       const uCol      = UNIVERSE_COLORS[universe] || "#8591b8";
       const pct       = Math.round(h.weight * 100);
       const infoMap = globalInfo[rawTicker] ? globalInfo
-                     : universe === "OMXS" ? omxsInfo
-                     : universe === "STOXX" ? stoxxInfo : sp500Info;
+                     : universe === "OMXS"   ? omxsInfo
+                     : universe === "STOXX"  ? stoxxInfo
+                     : universe === "NASDAQ" ? nasdaqInfo : sp500Info;
       const name    = infoMap[rawTicker]?.name || null;
       const shortTicker = rawTicker.replace(/\.[A-Z]+$/, "");
       return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">

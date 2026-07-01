@@ -9,24 +9,25 @@ log = logging.getLogger(__name__)
 STALE_HOURS = 48
 
 
-def run_omxs_sammansatt(data_root: Path) -> tuple[dict, dict]:
-    """Return (strategies_dict, company_info_dict) for dashboard."""
+def run_omxs_sammansatt(data_root: Path) -> tuple[dict, dict, dict]:
+    """Return (strategies_dict, company_info_dict, all_scores_dict) for dashboard."""
     path = data_root / "results" / "omxs_sammansatt_results.json"
     if not path.exists():
         log.warning("OMXS sammansatt: %s not found", path)
-        return {}, {}
+        return {}, {}, {}
 
     age_h = (time.time() - path.stat().st_mtime) / 3600
     try:
         data         = json.loads(path.read_text())
         strategies   = data.get("strategies", {})
         company_info = data.get("company_info", {})
+        all_scores   = data.get("all_scores", {})
         bench        = data.get("benchmark", {})
         for v in strategies.values():
             v.setdefault("benchmark", bench)
         log.info("OMXS sammansatt: %d strategies, %d tickers (%.1fh old)",
                  len(strategies), len(company_info), age_h)
-        return strategies, company_info
+        return strategies, company_info, all_scores
     except Exception as e:
         log.warning("OMXS sammansatt: failed: %s", e)
-        return {}, {}
+        return {}, {}, {}

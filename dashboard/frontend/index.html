@@ -54,7 +54,9 @@
     <button id="tab-stocks"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('stocks')">SP500</button>
     <button id="tab-omxs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('omxs')">OMXS</button>
     <button id="tab-stoxx"     class="tab-inactive pb-1 transition-colors" onclick="switchTab('stoxx')">STOXX</button>
+    <button id="tab-nasdaq"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('nasdaq')">Nasdaq</button>
     <button id="tab-global"    class="tab-inactive pb-1 transition-colors" onclick="switchTab('global')">Global</button>
+    <button id="tab-universe"  class="tab-inactive pb-1 transition-colors" onclick="switchTab('universe')">Universum</button>
     <button id="tab-docs"      class="tab-inactive pb-1 transition-colors" onclick="switchTab('docs')">Dokumentation</button>
   </nav>
 </header>
@@ -251,6 +253,36 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════
+     NASDAQ VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-nasdaq" class="hidden px-6 py-5 space-y-5">
+
+  <!-- Header + variant toggles -->
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-300">Nasdaq — Sammansatt Momentum</h2>
+      <p class="text-xs text-muted mt-0.5">
+        score = mean(ret3m, ret6m, ret12m) med 1M skip · absolut momentum · USD-priser ·
+        30 bps · månatlig rebalansering · survivorship bias
+      </p>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="nasdaq-toggles"></div>
+  </div>
+
+  <!-- Equity chart -->
+  <div class="bg-panel border border-border rounded-lg">
+    <div id="nasdaq-chart" class="w-full" style="height:420px;"></div>
+  </div>
+
+  <!-- Current holdings row -->
+  <div id="nasdaq-signal-row" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
+
+  <!-- Stats -->
+  <div id="nasdaq-stats"></div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
      GLOBAL VIEW
 ═══════════════════════════════════════════════════════════════ -->
 <div id="view-global" class="hidden px-6 py-5 space-y-5">
@@ -272,6 +304,25 @@
 </div>
 
 <div id="view-logs" class="hidden px-6 py-5 max-w-6xl"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     UNIVERSE / SCREENER VIEW
+═══════════════════════════════════════════════════════════════ -->
+<div id="view-universe" class="hidden px-6 py-5 space-y-5">
+  <div>
+    <h2 class="text-sm font-semibold text-slate-300">Universum — Alla instrument</h2>
+    <p class="text-xs text-muted mt-0.5">
+      Sammansatt momentumscore för alla instrument i OMXS, STOXX, SP500 och Nasdaq vid senaste rebalansering.
+      Positivt score = absolut momentum positivt. Klicka kolumnrubrik för att sortera.
+    </p>
+  </div>
+  <div class="flex gap-3 flex-wrap items-center">
+    <input id="universe-search" type="text" placeholder="Sök ticker eller namn…"
+           class="bg-panel border border-border rounded px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-accent w-60"/>
+    <div class="flex gap-2" id="universe-filters"></div>
+  </div>
+  <div id="universe-table-wrap" class="overflow-x-auto"></div>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════════
      DOCS VIEW

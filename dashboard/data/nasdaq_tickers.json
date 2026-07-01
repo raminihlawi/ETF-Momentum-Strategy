@@ -1,0 +1,23 @@
+[
+  "AAPL", "MSFT", "NVDA", "AMZN", "META", "TSLA", "GOOGL", "GOOG", "AVGO", "COST",
+  "NFLX", "ASML", "TMUS", "AMD", "PEP", "QCOM", "CSCO", "ADBE", "TXN", "AMGN",
+  "INTC", "INTU", "ISRG", "CMCSA", "VRTX", "BKNG", "ADP", "MU", "GILD", "ADI",
+  "REGN", "AMAT", "PANW", "LRCX", "KDP", "KLAC", "SNPS", "CDNS", "MRVL", "ORLY",
+  "FTNT", "MDLZ", "PAYX", "NXPI", "MELI", "CTAS", "ADSK", "TTD", "CRWD", "DXCM",
+  "ON", "AZN", "PCAR", "ABNB", "FAST", "MNST", "CPRT", "ROST", "CHTR", "EXC",
+  "KHC", "BIIB", "ODFL", "SMCI", "CTSH", "FANG", "CDW", "DLTR", "PYPL", "VRSK",
+  "IDXX", "ANSS", "ZS", "TEAM", "WDAY", "DDOG", "MDB", "PLTR", "COIN", "MCHP",
+  "CEG", "ROP", "CCEP", "HON", "SBUX", "MAR", "GEHC", "LULU", "EBAY", "ILMN",
+  "ALGN", "TTWO", "ZM", "DOCU", "SIRI", "EXPE", "MTCH", "SWKS", "QRVO", "WDC",
+  "NTAP", "ZBRA", "CSGP", "RIVN", "HOOD", "RBLX", "SOFI", "AFRM", "UPST", "BILL",
+  "APP", "DOCS", "CFLT", "SNOW", "NET", "OKTA", "ASAN", "GTLB", "MNDY", "BRZE",
+  "HUBS", "ESTC", "PSTG", "PAYC", "PCOR", "TYL", "PEGA", "PCTY", "TOST", "NCNO",
+  "BIDU", "PDD", "JD", "NTES", "TCOM", "BILI", "IQ", "XPEV", "LI", "NIO",
+  "GRAB", "SEA", "UBER", "LYFT", "DASH", "EA", "FOX", "FOXA", "WBD", "NWSA",
+  "IAC", "TWLO", "FIVN", "ORCL", "IBM", "HPQ", "DELL", "TSM", "MPWR", "LSCC",
+  "ONTO", "IPGP", "FORM", "ACLS", "SMTC", "AMBA", "DIOD", "SLAB", "COHU", "RMBS",
+  "ALGM", "MANH", "SPSC", "DOMO", "AI", "ZI", "S", "CYBR", "TENB", "QLYS",
+  "RGEN", "MEDP", "RARE", "ACAD", "FATE", "KRTX", "BMRN", "HALO", "ALNY", "INCY",
+  "EXAS", "NTRA", "GKOS", "IRTC", "NSTG", "ARWR", "NTLA", "EDIT", "BEAM", "VEEVA",
+  "PATH", "SMAR", "BAND", "FSLY", "NEWR", "SPLK", "JAMF", "WOLF", "AEHR", "ATEN"
+]

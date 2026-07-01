@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 DOWNLOAD_START = "2004-01-01"
 FX_TICKERS     = ["SEKUSD=X", "EURUSD=X"]
-GATE_TICKERS   = ["SPY", "EXSA.DE", "^OMX"]
+GATE_TICKERS   = ["SPY", "QQQ", "EXSA.DE", "^OMX"]
 BATCH_SIZE     = 25   # yfinance batch size per download call
 RATE_SLEEP     = 0.5  # seconds between batches
 
@@ -126,23 +126,26 @@ def load_ticker_lists(backend_dir: Path) -> dict[str, list[str]]:
     """Load committed ticker lists from dashboard/data/."""
     data_dir = backend_dir.parent / "data"
     import json
-    omxs  = json.loads((data_dir / "omxs_tickers.json").read_text())
-    stoxx = json.loads((data_dir / "stoxx_tickers.json").read_text())
+    omxs   = json.loads((data_dir / "omxs_tickers.json").read_text())
+    stoxx  = json.loads((data_dir / "stoxx_tickers.json").read_text())
+    nasdaq = json.loads((data_dir / "nasdaq_tickers.json").read_text())
     import pandas as pd
     pit   = pd.read_csv(data_dir / "sp500_ticker_start_end.csv")
     sp500 = sorted(pit["ticker"].unique().tolist())
-    return {"omxs": omxs, "stoxx": stoxx, "sp500": sp500}
+    return {"omxs": omxs, "stoxx": stoxx, "sp500": sp500, "nasdaq": nasdaq}
 
 
 def fetch_all(data_root: Path, backend_dir: Path) -> dict[str, int]:
     """Fetch all universes + FX. Returns dict of new row counts."""
     tickers = load_ticker_lists(backend_dir)
     result  = {}
-    log.info("Starting stock price fetch: %d OMXS, %d STOXX, %d SP500 tickers",
-             len(tickers["omxs"]), len(tickers["stoxx"]), len(tickers["sp500"]))
+    log.info("Starting stock price fetch: %d OMXS, %d STOXX, %d SP500, %d Nasdaq tickers",
+             len(tickers["omxs"]), len(tickers["stoxx"]),
+             len(tickers["sp500"]), len(tickers["nasdaq"]))
     result["fx_gates"]   = fetch_fx_and_gates(data_root)
-    result["omxs"]       = fetch_universe("omxs",  tickers["omxs"],  data_root)
-    result["stoxx"]      = fetch_universe("stoxx", tickers["stoxx"], data_root)
-    result["sp500"]      = fetch_universe("sp500", tickers["sp500"], data_root)
+    result["omxs"]       = fetch_universe("omxs",   tickers["omxs"],   data_root)
+    result["stoxx"]      = fetch_universe("stoxx",  tickers["stoxx"],  data_root)
+    result["sp500"]      = fetch_universe("sp500",  tickers["sp500"],  data_root)
+    result["nasdaq"]     = fetch_universe("nasdaq", tickers["nasdaq"], data_root)
     log.info("fetch_all done: %s", result)
     return result
