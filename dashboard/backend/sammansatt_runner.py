@@ -90,7 +90,13 @@ def _load_prices(universe_dir: Path, min_pts: int = MIN_PTS) -> dict[str, pd.Dat
             df = pd.read_csv(f, index_col=0, parse_dates=True, compression="gzip")
             if "Close" not in df.columns or len(df) < min_pts:
                 continue
-            prices[ticker] = df[["Close"]].dropna()
+            close = df[["Close"]].dropna()
+            # Skip tickers with extreme single-day price spikes (>200%) — yfinance data errors
+            max_daily = close["Close"].pct_change().abs().max()
+            if max_daily > 2.0:
+                log.debug("Skip %s: extreme price spike (max daily move %.0f%%)", ticker, max_daily * 100)
+                continue
+            prices[ticker] = close
         except Exception as e:
             log.debug("Skip %s: %s", f.name, e)
     return prices
