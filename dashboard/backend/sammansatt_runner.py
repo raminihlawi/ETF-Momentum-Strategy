@@ -625,7 +625,7 @@ def _nav_segment(
     for d in new_dates:
         ret = 0.0; n_v = 0
         for _, (w, s) in hold_px.items():
-            iloc = s.index.get_indexer([d], method="exact")[0]
+            iloc = s.index.get_indexer([d], method=None)[0]
             if iloc < 1:
                 continue
             p1 = float(s.iloc[iloc]); p0 = float(s.iloc[iloc - 1])
