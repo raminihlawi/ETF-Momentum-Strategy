@@ -1370,13 +1370,13 @@ function renderStocksChart(available) {
 function renderStocksSignalCards(available) {
   const el = document.getElementById("stocks-signal-row");
   if (!el) return;
-  const strategies = DATA?.strategies || {};
+  const strategies  = DATA?.strategies || {};
+  const companyInfo = DATA?.sp500_company_info || {};
 
   el.innerHTML = available.map(({ key, label, color }) => {
     const strat = strategies[key];
     if (!strat?.current_signal) return "";
     const { date, holdings } = strat.current_signal;
-    const spec = STRATEGY_SPECS[key] || {};
 
     const cashHolding = holdings?.find(h => h.ticker === "CASH" || h.ticker === "__CASH__");
     if (cashHolding) {
@@ -1398,11 +1398,14 @@ function renderStocksSignalCards(available) {
     const chips = (holdings || [])
       .filter(h => h.ticker !== "CASH" && h.ticker !== "__CASH__")
       .map(h => {
-        const c   = stockColorMap[h.ticker] || color;
-        const pct = Math.round(h.weight * 100);
+        const name = companyInfo[h.ticker]?.name || null;
+        const pct  = Math.round(h.weight * 100);
         return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-          <span class="text-xs font-mono font-medium text-slate-300">${h.ticker}</span>
-          <span class="text-xs text-muted">${pct}%</span>
+          <div class="min-w-0">
+            <span class="text-xs font-mono font-medium text-slate-300">${h.ticker}</span>
+            ${name ? `<span class="text-xs text-muted ml-2">${name}</span>` : ""}
+          </div>
+          <span class="text-xs text-muted ml-2 shrink-0">${pct}%</span>
         </div>`;
       }).join("");
 
@@ -2611,6 +2614,7 @@ function renderSTOXXPage() {
 
   _buildSTOXXToggles(available);
   _renderSTOXXChart(available);
+  _renderSTOXXHoldings(available);
   _renderSTOXXStats(available);
 }
 
@@ -2640,6 +2644,53 @@ function _buildSTOXXToggles(available) {
     });
     el.appendChild(btn);
   });
+}
+
+function _renderSTOXXHoldings(available) {
+  const el = document.getElementById("stoxx-signal-row");
+  if (!el) return;
+  const strategies  = DATA?.strategies || {};
+  const companyInfo = DATA?.stoxx_company_info || {};
+
+  el.innerHTML = available.map(({ key, label, color }) => {
+    const cs = strategies[key]?.current_signal;
+    if (!cs) return "";
+    const cashHolding = cs.holdings?.find(h => h.ticker === "CASH");
+    if (cashHolding) {
+      return `<div class="bg-panel border border-border rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+            <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+          </div>
+          <span class="text-xs text-muted">${cs.date}</span>
+        </div>
+        <p class="text-xs text-muted italic">Kontanter — absolut momentum negativt</p>
+      </div>`;
+    }
+    const chips = (cs.holdings || []).filter(h => h.ticker !== "CASH").map(h => {
+      const ticker  = h.ticker.replace(/\.[A-Z]+$/, "");
+      const name    = companyInfo[h.ticker]?.name || null;
+      const pct     = Math.round(h.weight * 100);
+      return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+        <div class="min-w-0">
+          <span class="text-xs font-mono font-medium text-slate-300">${ticker}</span>
+          ${name ? `<span class="text-xs text-muted ml-2">${name}</span>` : ""}
+        </div>
+        <span class="text-xs text-muted ml-2 shrink-0">${pct}%</span>
+      </div>`;
+    }).join("");
+    return `<div class="bg-panel border border-border rounded-lg p-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full" style="background:${color}"></span>
+          <span class="text-xs font-semibold tracking-widest uppercase" style="color:${color}">${label}</span>
+        </div>
+        <span class="text-xs text-muted">${cs.date}</span>
+      </div>
+      ${chips || '<p class="text-xs text-muted italic">Inga innehav</p>'}
+    </div>`;
+  }).join("");
 }
 
 function _renderSTOXXChart(available) {
@@ -2851,10 +2902,7 @@ function _renderSTOXXStats(available) {
         ⚠ UNVALIDATED — survivorship bias
       </div>
       ${summaryHtml}
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 pt-2">
-        ${currentHtml}
-        ${histHtml}
-      </div>
+      ${histHtml ? `<div class="pt-2">${histHtml}</div>` : ""}
     </div>`;
   }).join("");
 
@@ -3687,18 +3735,28 @@ function _renderGlobalSignal(available) {
       <p class="text-xs text-muted italic">Kontanter — absolut momentum negativt</p>
     </div>`;
 
+    const globalInfo = DATA?.global_company_info || {};
+    const omxsInfo   = DATA?.omxs_company_info  || {};
+    const stoxxInfo  = DATA?.stoxx_company_info  || {};
+    const sp500Info  = DATA?.sp500_company_info  || {};
     const chips = (cs.holdings || []).filter(h => h.ticker !== "CASH").map(h => {
-      const parts = h.ticker.split(":");
+      const parts    = h.ticker.split(":");
       const universe = parts.length > 1 ? parts[0] : h.universe || "";
-      const ticker   = parts.length > 1 ? parts.slice(1).join(":") : h.ticker;
-      const uCol     = UNIVERSE_COLORS[universe] || "#8591b8";
-      const pct      = Math.round(h.weight * 100);
+      const rawTicker = parts.length > 1 ? parts.slice(1).join(":") : h.ticker;
+      const uCol      = UNIVERSE_COLORS[universe] || "#8591b8";
+      const pct       = Math.round(h.weight * 100);
+      const infoMap = globalInfo[rawTicker] ? globalInfo
+                     : universe === "OMXS" ? omxsInfo
+                     : universe === "STOXX" ? stoxxInfo : sp500Info;
+      const name    = infoMap[rawTicker]?.name || null;
+      const shortTicker = rawTicker.replace(/\.[A-Z]+$/, "");
       return `<div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-mono font-medium text-slate-300">${ticker}</span>
-          <span class="text-xs px-1.5 py-0.5 rounded text-xs font-medium" style="background:${uCol}22;color:${uCol}">${universe}</span>
+        <div class="min-w-0 flex items-center gap-2 flex-wrap">
+          <span class="text-xs font-mono font-medium text-slate-300">${shortTicker}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded font-medium" style="background:${uCol}22;color:${uCol}">${universe}</span>
+          ${name ? `<span class="text-xs text-muted">${name}</span>` : ""}
         </div>
-        <span class="text-xs text-muted">${pct}%</span>
+        <span class="text-xs text-muted ml-2 shrink-0">${pct}%</span>
       </div>`;
     }).join("");
 

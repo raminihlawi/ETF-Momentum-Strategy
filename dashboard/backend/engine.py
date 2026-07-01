@@ -715,9 +715,11 @@ def run(cfg: dict = None, use_cache: bool = False):
     # ── STOXX Sammansatt Momentum ──────────────────────────────────────
     try:
         from stoxx_sammansatt_engine import run_stoxx_sammansatt
-        stoxx_sm_results, _ = run_stoxx_sammansatt(_DATA_DIR)
+        stoxx_sm_results, stoxx_sm_info = run_stoxx_sammansatt(_DATA_DIR)
         for k, v in stoxx_sm_results.items():
             out["strategies"][k] = v
+        if stoxx_sm_info:
+            out["stoxx_company_info"] = stoxx_sm_info
         if stoxx_sm_results:
             log.info("STOXX sammansatt: added %d strategies", len(stoxx_sm_results))
     except Exception as e:
@@ -726,9 +728,11 @@ def run(cfg: dict = None, use_cache: bool = False):
     # ── SP500 Sammansatt Momentum ──────────────────────────────────────
     try:
         from sp500_sammansatt_engine import run_sp500_sammansatt
-        sp500_sm_results, _ = run_sp500_sammansatt(_DATA_DIR)
+        sp500_sm_results, sp500_sm_info = run_sp500_sammansatt(_DATA_DIR)
         for k, v in sp500_sm_results.items():
             out["strategies"][k] = v
+        if sp500_sm_info:
+            out["sp500_company_info"] = sp500_sm_info
         if sp500_sm_results:
             log.info("SP500 sammansatt: added %d strategies", len(sp500_sm_results))
     except Exception as e:
@@ -737,9 +741,11 @@ def run(cfg: dict = None, use_cache: bool = False):
     # ── Global Sammansatt Momentum ─────────────────────────────────────
     try:
         from global_sammansatt_engine import run_global_sammansatt
-        global_results = run_global_sammansatt(_DATA_DIR)
+        global_results, global_info = run_global_sammansatt(_DATA_DIR)
         for k, v in global_results.items():
             out["strategies"][k] = v
+        if global_info:
+            out["global_company_info"] = global_info
         if global_results:
             log.info("Global sammansatt: added %d strategies", len(global_results))
     except Exception as e:

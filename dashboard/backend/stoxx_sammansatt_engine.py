@@ -10,14 +10,15 @@ def run_stoxx_sammansatt(data_root: Path) -> tuple[dict, dict]:
         log.warning("STOXX sammansatt: %s not found", path)
         return {}, {}
     try:
-        data = json.loads(path.read_text())
-        strategies = data.get("strategies", {})
-        bench      = data.get("benchmark", {})
+        data         = json.loads(path.read_text())
+        strategies   = data.get("strategies", {})
+        bench        = data.get("benchmark", {})
+        company_info = data.get("company_info", {})
         for v in strategies.values():
             v.setdefault("benchmark", bench)
-        log.info("STOXX sammansatt: %d strategies (%.1fh old)",
-                 len(strategies), (time.time() - path.stat().st_mtime) / 3600)
-        return strategies, {}
+        log.info("STOXX sammansatt: %d strategies, %d tickers (%.1fh old)",
+                 len(strategies), len(company_info), (time.time() - path.stat().st_mtime) / 3600)
+        return strategies, company_info
     except Exception as e:
         log.warning("STOXX sammansatt: failed: %s", e)
         return {}, {}

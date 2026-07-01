@@ -212,6 +212,26 @@ def _bench_nav(series: pd.Series, start: str = START) -> list[dict]:
 
 
 # ── Per-universe runners ───────────────────────────────────────────────
+def _fetch_company_info(tickers: list[str], existing: dict | None = None) -> dict:
+    """Fetch shortName + sector from yfinance for tickers not already in existing."""
+    import yfinance as yf
+    out = dict(existing or {})
+    missing = [t for t in tickers if t not in out]
+    if not missing:
+        return out
+    log.info("Fetching company info for %d tickers …", len(missing))
+    for tk in missing:
+        try:
+            info = yf.Ticker(tk).info
+            name = info.get("shortName") or info.get("longName") or tk
+            sec  = info.get("sector") or ""
+            out[tk] = {"name": name, "sector": sec}
+            time.sleep(0.1)
+        except Exception:
+            out[tk] = {"name": tk, "sector": ""}
+    return out
+
+
 def run_omxs(data_root: Path) -> dict:
     stock_dir = data_root / "stock_prices"
     prices    = _load_prices(stock_dir / "omxs")
@@ -270,9 +290,19 @@ def run_stoxx(data_root: Path) -> dict:
             "params":         {"top_n": top_n, "cost": COST},
             "benchmark":      {"label": "EXSA.DE (USD)", "series": bench_s},
         }
+    # Collect all tickers that have appeared in any allocation
+    all_tickers = {t for s in strategies.values()
+                   for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
+    existing = {}
+    stoxx_path = data_root / "results" / "stoxx_sammansatt_results.json"
+    if stoxx_path.exists():
+        existing = json.loads(stoxx_path.read_text()).get("company_info", {})
+    company_info = _fetch_company_info(sorted(all_tickers), existing)
+
     return {"generated_at": pd.Timestamp.now().isoformat(),
-            "strategies": strategies,
-            "benchmark":  {"label": "EXSA.DE (USD)", "series": bench_s}}
+            "strategies":   strategies,
+            "benchmark":    {"label": "EXSA.DE (USD)", "series": bench_s},
+            "company_info": company_info}
 
 
 def run_sp500(data_root: Path, backend_dir: Path) -> dict:
@@ -308,9 +338,18 @@ def run_sp500(data_root: Path, backend_dir: Path) -> dict:
             "params":         {"top_n": top_n, "cost": COST},
             "benchmark":      {"label": "SPY", "series": bench_s},
         }
+    all_tickers = {t for s in strategies.values()
+                   for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
+    existing = {}
+    sp500_path = data_root / "results" / "sp500_sammansatt_results.json"
+    if sp500_path.exists():
+        existing = json.loads(sp500_path.read_text()).get("company_info", {})
+    company_info = _fetch_company_info(sorted(all_tickers), existing)
+
     return {"generated_at": pd.Timestamp.now().isoformat(),
-            "strategies": strategies,
-            "benchmark":  {"label": "SPY", "series": bench_s}}
+            "strategies":   strategies,
+            "benchmark":    {"label": "SPY", "series": bench_s},
+            "company_info": company_info}
 
 
 def run_global(data_root: Path, backend_dir: Path) -> dict:
@@ -368,10 +407,21 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
             "benchmark": {"label": "SPY", "series": bench_s},
         }
 
+    # company_info keyed by raw ticker (without "OMXS:"/"STOXX:"/"SP500:" prefix)
+    raw_tickers = {t.split(":", 1)[1] if ":" in t else t
+                   for s in strategies.values()
+                   for e in s["alloc_log"] for t in e["holdings"] if t != "CASH"}
+    existing = {}
+    global_path = data_root / "results" / "global_sammansatt_results.json"
+    if global_path.exists():
+        existing = json.loads(global_path.read_text()).get("company_info", {})
+    company_info = _fetch_company_info(sorted(raw_tickers), existing)
+
     return {"generated_at": pd.Timestamp.now().isoformat(),
-            "strategies": strategies,
-            "benchmark":  {"label": "SPY", "series": bench_s},
-            "ticker_tag": tag}
+            "strategies":   strategies,
+            "benchmark":    {"label": "SPY", "series": bench_s},
+            "ticker_tag":   tag,
+            "company_info": company_info}
 
 
 # ── Main entry point ──────────────────────────────────────────────────

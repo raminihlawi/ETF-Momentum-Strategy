@@ -4,20 +4,21 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-def run_global_sammansatt(data_root: Path) -> dict:
+def run_global_sammansatt(data_root: Path) -> tuple[dict, dict]:
     path = data_root / "results" / "global_sammansatt_results.json"
     if not path.exists():
         log.warning("Global sammansatt: %s not found", path)
-        return {}
+        return {}, {}
     try:
-        data = json.loads(path.read_text())
-        strategies = data.get("strategies", {})
-        bench      = data.get("benchmark", {})
+        data         = json.loads(path.read_text())
+        strategies   = data.get("strategies", {})
+        bench        = data.get("benchmark", {})
+        company_info = data.get("company_info", {})
         for v in strategies.values():
             v.setdefault("benchmark", bench)
-        log.info("Global sammansatt: %d strategies (%.1fh old)",
-                 len(strategies), (time.time() - path.stat().st_mtime) / 3600)
-        return strategies
+        log.info("Global sammansatt: %d strategies, %d tickers (%.1fh old)",
+                 len(strategies), len(company_info), (time.time() - path.stat().st_mtime) / 3600)
+        return strategies, company_info
     except Exception as e:
         log.warning("Global sammansatt: failed: %s", e)
-        return {}
+        return {}, {}
