@@ -427,14 +427,12 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
     omxs_usd    = _apply_fx(_load_prices(stock_dir / "omxs"),   fx_sek)
     stoxx_usd   = _apply_fx(_load_prices(stock_dir / "stoxx"),  fx_eur)
     sp500_raw   = _load_prices(stock_dir / "sp500")
-    nasdaq_raw  = _load_prices(stock_dir / "nasdaq")
 
     all_prices: dict = {}
     tag:        dict = {}
-    for tk, df in omxs_usd.items():   all_prices[f"OMXS:{tk}"]   = df; tag[f"OMXS:{tk}"]   = "OMXS"
-    for tk, df in stoxx_usd.items():  all_prices[f"STOXX:{tk}"]  = df; tag[f"STOXX:{tk}"]  = "STOXX"
-    for tk, df in sp500_raw.items():  all_prices[f"SP500:{tk}"]  = df; tag[f"SP500:{tk}"]  = "SP500"
-    for tk, df in nasdaq_raw.items(): all_prices[f"NASDAQ:{tk}"] = df; tag[f"NASDAQ:{tk}"] = "NASDAQ"
+    for tk, df in omxs_usd.items():  all_prices[f"OMXS:{tk}"]  = df; tag[f"OMXS:{tk}"]  = "OMXS"
+    for tk, df in stoxx_usd.items(): all_prices[f"STOXX:{tk}"] = df; tag[f"STOXX:{tk}"] = "STOXX"
+    for tk, df in sp500_raw.items(): all_prices[f"SP500:{tk}"] = df; tag[f"SP500:{tk}"] = "SP500"
 
     pit = pd.read_csv(backend_dir.parent / "data" / "sp500_ticker_start_end.csv",
                       parse_dates=["start_date", "end_date"])
@@ -442,7 +440,7 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
 
     def valid_global(ticker: str, date_str: str) -> bool:
         if not ticker.startswith("SP500:"):
-            return True  # OMXS, STOXX, NASDAQ — always valid
+            return True
         raw = ticker.replace("SP500:", "")
         d   = pd.Timestamp(date_str)
         return bool(((pit.start_date <= d) & (pit.end_date > d) &
@@ -451,22 +449,19 @@ def run_global(data_root: Path, backend_dir: Path) -> dict:
     spy_raw  = _load_fx(stock_dir / "gates", "SPY")
     bench_s  = _bench_nav(spy_raw)
 
-    # 4-universe configs: (top_n, {uni: max_picks})
-    configs = [
-        (9,  {"OMXS": 3, "STOXX": 3, "SP500": 2, "NASDAQ": 2}),
-        (12, {"OMXS": 3, "STOXX": 3, "SP500": 3, "NASDAQ": 3}),
-        (15, {"OMXS": 4, "STOXX": 4, "SP500": 4, "NASDAQ": 4}),
-    ]
+    configs = [(7, {"OMXS": 3, "STOXX": 3, "SP500": 3}),
+               (10, {"OMXS": 4, "STOXX": 4, "SP500": 4}),
+               (15, {"OMXS": 5, "STOXX": 5, "SP500": 5})]
 
     strategies: dict = {}
     all_scores: dict = {}
     for top_n, max_u in configs:
-        log.info("Global Top-%d (4 universes) …", top_n)
+        log.info("Global Top-%d (max %d/univ) …", top_n, max_u["SP500"])
         nav, al, last_sc = _run_backtest(all_prices, valid_fn=valid_global,
                                          top_n=top_n, max_per_universe=max_u, tag=tag)
         key = f"global_top{top_n}"
         strategies[key] = {
-            "label":          f"Global Top-{top_n} (4 univ, max {max_u['SP500']}-{max_u['OMXS']}/univ)",
+            "label":          f"Global Top-{top_n} (max {max_u['SP500']}/univ)",
             "nav":            nav,
             "stats":          _calc_stats(nav),
             "alloc_log":      al,
@@ -814,10 +809,9 @@ def run_monthly_rebalance(data_root: Path, backend_dir: Path) -> dict[str, str]:
     # Build tagged global pool (4 universes)
     global_px:  dict = {}
     global_tag: dict = {}
-    for tk, s in omxs_px.items():   global_px[f"OMXS:{tk}"]   = s; global_tag[f"OMXS:{tk}"]   = "OMXS"
-    for tk, s in stoxx_px.items():  global_px[f"STOXX:{tk}"]  = s; global_tag[f"STOXX:{tk}"]  = "STOXX"
-    for tk, s in sp500_px.items():  global_px[f"SP500:{tk}"]  = s; global_tag[f"SP500:{tk}"]  = "SP500"
-    for tk, s in nasdaq_px.items(): global_px[f"NASDAQ:{tk}"] = s; global_tag[f"NASDAQ:{tk}"] = "NASDAQ"
+    for tk, s in omxs_px.items():  global_px[f"OMXS:{tk}"]  = s; global_tag[f"OMXS:{tk}"]  = "OMXS"
+    for tk, s in stoxx_px.items(): global_px[f"STOXX:{tk}"] = s; global_tag[f"STOXX:{tk}"] = "STOXX"
+    for tk, s in sp500_px.items(): global_px[f"SP500:{tk}"] = s; global_tag[f"SP500:{tk}"] = "SP500"
 
     status: dict = {}
 
